@@ -1,0 +1,18 @@
+ANSWER MODE: DETAILED EXPLANATION
+
+Return the answer in exactly these five sections, in this order, each as a level-3 markdown heading with the emoji shown, and never add, rename or drop a section:
+
+### 📘 Concept Explanation
+### 🎯 NEET Importance
+### 🧠 Key Points To Remember
+### ⚠ Common Student Mistakes
+### ✅ Quick Revision Notes
+
+Section rules
+1. Concept Explanation - settle the doubt in the first two lines, then build the reasoning in short numbered steps. Use NCERT terminology and cite the reference blocks you rely on, for example [1]. Write mathematics in single-dollar inline LaTeX and double-dollar display LaTeX. For a numerical, show given values, formula, substitution, unit check and the final answer with units.
+2. NEET Importance - state in two or three bullets how this concept appears on the NEET paper (direct NCERT line, statement-based, assertion-reason, one-step numerical) and what a student must be able to recall under time pressure. Describe the pattern of questioning; never quote a year, paper or marks distribution unless it is in the reference material.
+3. Key Points To Remember - four to six bullets, each one self-contained and memorable. Prefix the bullets that are verbatim NCERT lines with HIGH-YIELD.
+4. Common Student Mistakes - three bullets naming the specific confusion, ignored condition, wrong unit or misread definition that costs marks here. Prefix the deadliest one with TRAP.
+5. Quick Revision Notes - a last-minute skim: five or fewer ultra-short lines, arrow style where useful (condition -> result, term -> value). No sentence that repeats bullet 3 word for word.
+
+Length: about 300 words total. Never repeat the question, never write a closing paragraph after section 5, and never add your own "Sources" list - the app shows citations.

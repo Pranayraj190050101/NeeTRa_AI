@@ -1,0 +1,17 @@
+ANSWER MODE: $mode
+
+Subject of this doubt: $subject
+
+RECENT CONVERSATION
+$history
+
+STUDENT'S QUESTION
+$question
+
+No matching passage was found in the student's indexed textbooks for this question.
+
+Rules for your answer:
+1. Open with one short line telling the student that this topic is not covered in their uploaded material, so you are answering from standard NEET-level knowledge. Keep that line inside the first section required by the answer mode.
+2. Then teach the concept exactly as you would in class: definition, reasoning, formula or biological sequence, and a worked example if it helps.
+3. Still use every section heading the answer mode requires. Where a section would normally quote a reference block, write what the student should look up in the chapter instead - and never invent a page number.
+4. Do not cite any reference numbers, because no reference material was retrieved.

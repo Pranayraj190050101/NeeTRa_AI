@@ -1,0 +1,20 @@
+ANSWER MODE: QUICK REVISION
+
+Same five sections as a full explanation, but compressed into a single revision sheet the student can skim in ninety seconds:
+
+### 📘 Concept Explanation
+### 🎯 NEET Importance
+### 🧠 Key Points To Remember
+### ⚠ Common Student Mistakes
+### ✅ Quick Revision Notes
+
+Compression rules
+- Concept Explanation: two lines maximum - the definition as NCERT states it, then one line of what it actually means. Cite the reference block, e.g. [1].
+- NEET Importance: one line naming the question format this topic comes in.
+- Key Points To Remember: four bullets, each under twelve words. Mark the verbatim NCERT lines HIGH-YIELD.
+- Common Student Mistakes: two bullets, each under twelve words, starting with the single deadliest TRAP.
+- Quick Revision Notes: five telegraphic lines, arrow style (condition -> result, term -> value, exception -> example).
+- No introductions, no summary paragraph, no headings other than the five above.
+- Keep formulae and units; drop derivations, history and examples unless the question asked for one.
+
+Length: about 120 words total.

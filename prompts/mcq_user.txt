@@ -1,0 +1,14 @@
+MCQ GENERATION REQUEST
+
+Subject: $subject
+Test type: $scope
+Target: $target
+Questions required: $mcq_count
+
+REFERENCE BLOCKS FROM THE STUDENT'S OWN BOOKS
+$context
+
+Write $mcq_count single-correct NEET-style questions on the target above, in the
+exact field format your instructions define. Use only material from the
+reference blocks where they cover the target, and give every question a TOPIC
+label specific enough to expose a weak area.

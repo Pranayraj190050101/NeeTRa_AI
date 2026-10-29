@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------
+# NEETra AI - runtime dependencies
+# Tested with Python 3.10 / 3.11 / 3.12 (64-bit).
+#
+# The version ranges deliberately stay open across the LangChain 0.3 and 1.x
+# releases: the code base only uses APIs that exist in both (the single
+# breaking change, the FAISS pickle-trust keyword, is detected at runtime).
+#
+# For CUDA acceleration install torch from the official index FIRST, e.g.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+# then install this file.  On CPU the pinned builds below are sufficient.
+# ---------------------------------------------------------------------------
+
+# --- Web UI ----------------------------------------------------------------
+gradio>=4.44,<6.0
+
+# --- Orchestration ---------------------------------------------------------
+# Verified with langgraph 1.2.x / langchain-core 1.7.x / langchain-community 0.4.x
+langgraph>=0.2.60,<2.0
+langchain-core>=0.3.0,<2.0
+langchain-community>=0.3.0,<0.5
+langchain-huggingface>=0.1.0,<2.0
+langchain-text-splitters>=0.3.0,<2.0
+
+# --- Vector store ----------------------------------------------------------
+faiss-cpu>=1.8.0,<2.0
+
+# --- Embeddings / LLM ------------------------------------------------------
+sentence-transformers>=3.0.0,<6.0
+transformers>=4.45.0,<5.0
+torch>=2.3.0
+accelerate>=0.34.0
+huggingface-hub>=0.24.0
+safetensors>=0.4.0
+sentencepiece>=0.2.0
+
+# --- Hosted LLM provider (LLM_PROVIDER=groq) -------------------------------
+# Official Groq SDK, used by llm/groq_client.py. Imported lazily, so the offline
+test suite and ``app.py --check`` run without it; required only at runtime when
+groq is the active provider.
+groq>=0.11.0,<1.0
+
+# --- Document ingestion ----------------------------------------------------
+pypdf>=5.0.0,<7.0
+
+# --- Configuration / utilities --------------------------------------------
+pydantic>=2.7.0,<3.0
+pydantic-settings>=2.3.0,<3.0
+python-dotenv>=1.0.0
+numpy>=1.26.0,<3.0
+
+# ---------------------------------------------------------------------------
+# Optional extras (not installed by default - see README):
+#   bitsandbytes>=0.43.0   -> 4-bit NF4 quantisation (Linux/CUDA recommended)
+#   pandas, matplotlib     -> richer analytics for the future weakness agent
+# ---------------------------------------------------------------------------

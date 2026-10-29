@@ -1,0 +1,38 @@
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# --- Secrets / local config ------------------------------------------------
+.env
+.env.local
+
+# --- Runtime artefacts -----------------------------------------------------
+logs/
+*.log
+vectordb/**/*.faiss
+vectordb/**/*.pkl
+vectordb/*.json
+!vectordb/.gitkeep
+# Study history is the student's own data (one JSON document per profile).
+progress/*.json
+!progress/.gitkeep
+
+# Keep source PDFs out of git by default (large binaries, copyrighted books).
+# Remove the next two lines if you want to version your corpus.
+data/**/*.pdf
+data/**/*.txt
+
+# --- Tooling ---------------------------------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db

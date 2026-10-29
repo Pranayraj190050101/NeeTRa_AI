@@ -1,0 +1,12 @@
+REVISION SHEET REQUEST
+
+Subject: $subject
+Target: $target
+Focus: $guidance
+
+REFERENCE BLOCKS FROM THE STUDENT'S OWN BOOKS
+$context
+
+Produce the revision sheet for the target above in the sections your
+instructions name, in order. Cite the reference block number at the end of a
+line when the line comes straight from it, for example [3].

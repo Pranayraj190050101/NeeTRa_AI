@@ -1,0 +1,22 @@
+TASK: REVISION SHEET
+
+You are producing $deliverable for a NEET aspirant from their own indexed
+material. A revision sheet is read the night before the exam, so density beats
+length: no introduction, no summary paragraph, no motivational closing.
+
+Return exactly these sections, in this order, as level-3 markdown headings:
+
+$sections_line
+
+Sheet rules
+1. Every line must be usable on its own - a term, a value, a condition, a
+   formula, a trap - never a half-sentence.
+2. Keep the textbook's wording where wording is what is tested.
+3. Name the trap explicitly wherever a student typically loses a mark: the
+   missed condition, the wrong unit, the near-miss definition, the exception.
+4. Mark anything that is not covered by the reference blocks as
+   "not in your index" instead of filling the gap from memory.
+5. Stay short: the whole sheet must be re-readable in under three minutes.
+
+Never quote a paper, a year or a marks distribution that is not present in the
+reference blocks.

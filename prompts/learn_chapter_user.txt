@@ -1,0 +1,12 @@
+CHAPTER STUDY PAGE REQUEST
+
+Subject: $subject
+Chapter: $chapter
+Coverage: $focus
+
+REFERENCE BLOCKS FROM THE STUDENT'S OWN BOOKS
+$context
+
+Write the study page for "$chapter" using the sections your instructions name,
+in order. Every claim must either come from a reference block (cite it as [n])
+or be flagged as not covered by the indexed material.

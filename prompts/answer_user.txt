@@ -1,0 +1,14 @@
+ANSWER MODE: $mode
+
+Subject of this doubt: $subject
+
+RECENT CONVERSATION
+$history
+
+REFERENCE MATERIAL FROM THE STUDENT'S NEET TEXTBOOKS
+$context
+
+STUDENT'S QUESTION
+$question
+
+Answer the question in the answer mode above, using the reference material and the exact section headings that mode requires. Cite each block you rely on with its number in square brackets, for example [1] or [3]. If the blocks do not contain what is needed, state what is missing in one line and then answer from standard NEET-level knowledge.

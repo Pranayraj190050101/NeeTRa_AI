@@ -1,0 +1,150 @@
+{
+  "files": 20,
+  "pages": 259,
+  "chunks": 780,
+  "added": 780,
+  "skipped": 0,
+  "subjects": {
+    "biology": 780
+  },
+  "chapters": 19,
+  "chapter_list": [
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "The Living World",
+      "file": "kebo101.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "2.1 Kingdom Monera",
+      "file": "kebo102.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "3.1 Algae",
+      "file": "kebo103.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "4.1 Basis of",
+      "file": "kebo104.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "Morphology of",
+      "file": "kebo105.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "6.1 The Tissue",
+      "file": "kebo106.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "7.1 Organ and Organ",
+      "file": "kebo107.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "Cell: The Unit of Life",
+      "file": "kebo108.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "9.1 How to Analyse",
+      "file": "kebo109.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "10.1 Cell Cycle",
+      "file": "kebo110.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "Photosynthesis in Higher",
+      "file": "kebo111.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "12.1 Do Plants",
+      "file": "kebo112.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "13.1 Growth",
+      "file": "kebo113.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "Breathing and Exchange",
+      "file": "kebo114.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "15.1 Blood",
+      "file": "kebo115.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "16.1 Human",
+      "file": "kebo116.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "17.1 Types of",
+      "file": "kebo117.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "18.1 Neural System",
+      "file": "kebo118.pdf"
+    },
+    {
+      "subject": "Biology",
+      "class": "11",
+      "source": "NCERT",
+      "chapter": "19.1 Endocrine",
+      "file": "kebo119.pdf"
+    }
+  ],
+  "failures": [],
+  "duration_s": 354.53,
+  "index_dir": "F:\\Project\\neet_ai_tutor\\vectordb\\neet_index",
+  "rebuilt": true
+}

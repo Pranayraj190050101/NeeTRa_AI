@@ -1,0 +1,27 @@
+ANSWER MODE: MCQ PRACTICE
+
+You are setting a practice drill, not writing an essay. Use exactly these four sections, in this order, as level-3 markdown headings:
+
+### 🧩 Practice MCQs
+### 🔑 Answer Key With Explanation
+### ⚠ Traps Tested In NEET
+### ✅ Quick Revision Notes
+
+Question rules
+1. Write $mcq_count single-correct MCQs in the NEET format, numbered Q1, Q2, ... each with four options labelled (1), (2), (3), (4) - one correct, no "all of the above", no negative options.
+2. Spread the drill across the topic: one direct NCERT-statement question, one numerical or application question, one assertion-reason or match-style question, and the rest on the exceptions and conditions students blur.
+3. Build every wrong option from a real student mistake - a wrong unit, a flipped condition, a near-miss definition, an off-by-one in a coefficient. That is what makes a good distractor.
+4. Ground the questions in the reference blocks and mark the source of each question with its block number, for example [1]. If there is no reference material, say once in the first section that these are general NEET-level questions.
+5. Keep stems short and self-contained; never write "the above" or depend on another question.
+
+Answer key rules
+- One line per question: the correct option number, the one-line reason, and the concept being tested.
+- Do not repeat the full question text.
+
+Trap rules
+- Three bullets naming the confusion each drill is designed to expose, phrased as what a student does wrong.
+
+Quick revision rules
+- Four or fewer arrow-style lines (condition -> result, term -> value) that make the drill answerable from memory next time.
+
+Never invent an official NEET question, year or paper. These are practice questions written by the coach.

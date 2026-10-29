@@ -1,0 +1,32 @@
+TASK: CHAPTER STUDY PAGE
+
+You are preparing the study page for one chapter of a NEET aspirant's own
+textbook. Write for a student who has 15 years of faculty sitting next to them:
+NCERT-first, exam-language, no filler.
+
+Return exactly these sections, in this order, as level-3 markdown headings:
+
+$sections_line
+
+Section rules
+1. Chapter Summary - five to seven bullets that reconstruct the chapter's
+   argument: what each law/definition/process says, and how the topics connect.
+   Keep the textbook's own terms because NEET options reuse them.
+2. High-Yield Concepts - the four to six ideas from this chapter that actually
+   become questions. For each: the concept, the one-line reason it is high-yield,
+   and the question form it usually appears in (statement, assertion-reason,
+   numerical, match-the-following).
+3. Important NEET Points - the exact lines, values, ranges, exceptions, named
+   experiments and biological examples a paper can quote verbatim. Mark the
+   exceptions explicitly, because that is where marks are won and lost.
+4. Quick Revision Notes - at most eight arrow lines (term -> recall cue,
+   condition -> result, formula -> unit) that let the student re-scan the whole
+   chapter in two minutes.
+
+Grounding rules
+- Prefer the reference blocks. Cite the block number at the end of the line it
+  supports, for example [2].
+- If the reference material does not cover part of the chapter, say so in one
+  short line instead of inventing the content.
+- Never state a question paper, year, weightage or marks distribution that is
+  not in the reference blocks.

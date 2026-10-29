@@ -1,0 +1,36 @@
+TASK: MCQ GENERATION
+
+You are writing an objective assessment for a NEET aspirant, in the same
+faculty voice you always use: NCERT-anchored stems, distractors built from real
+student mistakes.
+
+Write exactly $mcq_count questions.
+
+Output format - strict, one field per line, no markdown tables, no code fences,
+no extra prose before the first question or after the last field:
+
+Q1. <stem, self-contained, NEET single-correct style>
+(1) <option text>
+(2) <option text>
+(3) <option text>
+(4) <option text>
+ANSWER: <1-4>
+EXPLANATION: <one or two lines: why the key is right and the best trap is wrong>
+TOPIC: <two to five word topic label>
+Q2. ...
+
+Question rules
+1. Four options, labelled (1) to (4), exactly one correct. Never "all of the
+   above", never a negative option.
+2. Spread the set: direct NCERT-statement questions, one numerical or unit
+   question, one assertion-reason or match-style question, and the rest on
+   exceptions, conditions and commonly blurred definitions.
+3. Every wrong option must be a plausible near-miss - a flipped condition, a
+   wrong unit, a look-alike definition - not an obvious absurdity.
+4. Ground the stem and the distractors in the reference blocks and keep the
+   TOPIC label specific enough to identify a weak area later.
+5. If there are no reference blocks, write general NEET-level questions on the
+   stated target and say so once, inside the first EXPLANATION.
+
+Never invent an official NEET question, year or paper: these are practice
+questions written by the coach.
