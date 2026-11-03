@@ -47,13 +47,36 @@ __all__ = [
 
 #: Appended to the chat's own stylesheet so module tabs share its look.
 PLATFORM_CSS = """
-.genie-card {border: 1px solid #e5e7eb; border-radius: 12px; padding: 0.85rem 1rem;
-  background: #ffffff; line-height: 1.4;}
-.genie-kpi {font-size: 1.35rem; font-weight: 600; color: #111827;}
-.genie-kpi-label {font-size: 0.8rem; color: #6b7280; text-transform: uppercase;
-  letter-spacing: 0.04em;}
-.genie-hint {font-size: 0.85rem; color: #4b5563;}
-#genie-dashboard .gradio-container {max-width: 1240px !important;}
+body {background: #f6f8fd;}
+.gradio-container {background: #f6f8fd;}
+.tabs > .tab-nav {gap: 0.35rem; border-bottom: 1px solid #e2e8f0; margin-bottom: 1.25rem;}
+.tabs > .tab-nav button {border-radius: 0.75rem 0.75rem 0 0; font-weight: 650; color: #526079;}
+.tabs > .tab-nav button.selected {color: #4f46b8; background: #eeecff;}
+.genie-card, .genie-main-card, .genie-profile-card, .genie-side-card, .genie-chat-card {
+  border: 1px solid #e4e9f2; border-radius: 1.15rem; padding: 1.15rem 1.25rem;
+  background: #ffffff; box-shadow: 0 8px 28px rgba(39, 50, 87, 0.055); line-height: 1.5;}
+.genie-hero {border-radius: 1.35rem; padding: 1.6rem 1.8rem; margin-bottom: 1rem;
+  background: linear-gradient(125deg, #eeecff 0%, #e8f4ff 58%, #e9fbf3 100%);
+  border: 1px solid #dfe4fa;}
+.genie-hero h2 {font-size: clamp(1.45rem, 3vw, 2rem); color: #2f276f; margin-bottom: 0.45rem;}
+.genie-hero p {color: #526079;}
+.genie-actions {gap: 0.75rem; margin: 0.5rem 0 1rem;}
+.genie-actions button {min-height: 3.1rem; border-radius: 0.85rem; font-weight: 700;}
+.genie-readiness {border: 1px solid #dce9e3; background: #f3fbf7; border-radius: 0.9rem;
+  padding: 0.8rem 1rem; margin-bottom: 0.75rem;}
+.genie-kpi {font-size: 1.35rem; font-weight: 700; color: #17233c;}
+.genie-kpi-label {font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;}
+.genie-hint {font-size: 0.9rem; color: #526079;}
+.developer-toggle {max-width: 13rem; margin-top: 2rem; opacity: 0.72;}
+button.primary {background: linear-gradient(110deg, #6356d9, #4e46b8); border: none;}
+input, textarea, .wrap {border-radius: 0.75rem !important;}
+@media (max-width: 800px) {
+  .genie-main-card, .genie-profile-card, .genie-side-card, .genie-chat-card {padding: 0.85rem;}
+  .genie-hero {padding: 1.15rem;}
+  .genie-actions {flex-direction: column;}
+  .tabs > .tab-nav {overflow-x: auto; flex-wrap: nowrap;}
+  .tabs > .tab-nav button {white-space: nowrap; font-size: 0.86rem;}
+}
 """
 
 #: Navigation contract of the platform. ``id`` values are the Gradio tab ids.
@@ -190,7 +213,7 @@ def notices_md(notices: Sequence[str], *, title: str = "Coach notes") -> str:
 def citations_md(citations: Sequence[Mapping[str, Any]] | None) -> str:
     """Render grounding citations with the chat's own formatter."""
     if not citations:
-        return "_No indexed passage was used for this document._"
+        return "_No textbook reference was used for this document._"
     try:  # reuse the coach's renderer so both halves of the app look identical
         from agents.tutor import citations_to_markdown
 

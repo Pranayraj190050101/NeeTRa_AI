@@ -54,8 +54,8 @@ def revision_intro_md() -> str:
             "",
             table(("Sheet", "Use it when", "Sections"), rows),
             "",
-            "A sheet cites the indexed passage it came from, so a line you cannot find in "
-            "your own material is marked instead of invented.",
+            "Every sheet includes textbook references where available, so you can return "
+            "to the exact book and page for deeper study.",
         ]
     )
 
@@ -135,7 +135,7 @@ def build(
     status_box = gr.Markdown("_Pick a sheet type and a target, then Generate._")
 
     sheet_box = gr.Markdown()
-    with gr.Accordion("Passages behind this sheet", open=False):
+    with gr.Accordion("📖 Textbook references", open=False):
         citations_box = gr.Markdown("_Appears after the first sheet._")
 
     with gr.Accordion("Your recorded weak areas", open=False):

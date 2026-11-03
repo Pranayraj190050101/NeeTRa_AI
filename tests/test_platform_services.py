@@ -101,7 +101,9 @@ def test_dashboard_payload_has_every_section_the_tab_renders(platform: GeniePlat
     payload = platform.dashboard()
     assert set(payload) == {"welcome", "motivation", "stats", "subjects", "actions", "capabilities"}
     assert payload["welcome"]["chapters"] == 3
-    assert payload["welcome"]["modules"] == ["Learn", "Practice", "Ask Genie", "Progress", "Revision Hub"]
+    assert payload["welcome"]["modules"] == [
+        "Dashboard", "Learn", "Practice", "Ask Genie", "Progress", "Revision Hub"
+    ]
     assert payload["stats"]["tests"] == 0
     assert payload["motivation"]["line"]
     assert [card["subject"] for card in payload["subjects"]] == ["physics", "chemistry", "biology"]

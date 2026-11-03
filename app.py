@@ -1,34 +1,16 @@
-"""NEETra AI - Gradio application for the NEETra AI preparation assistant.
+"""NEET Genie - a student-first NEET learning application.
 
 Run::
 
-    python app.py                      # start the UI (models load on first question)
-    python app.py --check              # validate configuration and exit
-    python app.py --ingest             # build the knowledge base from NCERT chapter PDFs
-    python app.py --host 0.0.0.0 --port 7860 --share
+    python app.py                      # verify study services, then start the UI
+    python app.py --check              # run startup diagnostics and exit
+    python app.py --ingest             # build the NCERT study library
 
-The product is a NEET preparation assistant with **Ask Genie - the doubt-
-solving coach chat - as its primary module**.  Its navigation is **Ask Genie**,
-**Dashboard**, **Practice**, **Progress** and **Revision Hub**, followed by the
-three diagnostic tabs the tutor already shipped with (Knowledge base, Coach,
-Architecture).  The optional **Learn** module stays available behind the
-``NEETRA_ENABLE_LEARN`` feature flag (on by default; ``false`` hides the tab and
-never builds its widgets).  Ask Genie *is* the original coach chat with all
-four answer modes; it was not rewritten, it simply leads the app.
-
-The chat still streams three things while a question is being answered:
-
-1. live status from every agent (routing -> retrieval -> generation),
-2. the answer tokens themselves (``TextIteratorStreamer``),
-3. the textbook passages that grounded the answer, with page numbers.
-
-The sidebar of Ask Genie carries the coach controls: the **answer mode**
-(Detailed Explanation / Quick Revision / MCQ Practice / PYQ Focus) that decides
-the section shape of every reply.
-
-All module content comes from the ``learning/`` services (chapter catalog,
-generator, progress store, capability registry) and every widget from ``ui/``,
-which is why this file only arranges tabs and hands the tabs their services.
+The student interface has exactly six modules: Dashboard, Learn, Practice,
+Ask Genie, Progress and Revision Hub.  Provider, retrieval and implementation
+diagnostics are hidden behind Developer Mode.  Startup performs a real answer
+and textbook-search probe before enabling the doubt box; a failed dependency or
+provider never appears as a ready tutor.
 """
 
 from __future__ import annotations
@@ -53,7 +35,7 @@ from agents.state import TutorResult  # noqa: E402
 from agents.tutor import NEETTutor, citations_to_markdown  # noqa: E402
 from agents.registry import describe_registry  # noqa: E402
 from config import BASE_DIR, ProviderConfigError, Settings, get_settings  # noqa: E402
-from learning.capabilities import default_registry, describe_capabilities  # noqa: E402
+from learning.capabilities import describe_capabilities  # noqa: E402
 from utils.answer_format import format_contract  # noqa: E402
 from utils.constants import AnswerMode  # noqa: E402
 from utils.logging_utils import get_logger, setup_logging  # noqa: E402
@@ -67,25 +49,28 @@ from ui import revision as revision_ui  # noqa: E402
 
 logger = get_logger(__name__)
 
-SUBJECT_CHOICES: list[str] = ["auto", "physics", "chemistry", "biology", "general"]
 STREAM_THROTTLE_S: float = 0.06
 
 EXAMPLES: list[list[str]] = [
-    ["Explain the photoelectric effect and write Einstein's photoelectric equation."],
-    ["Why is the boiling point of water higher than that of hydrogen sulphide?"],
-    ["Differentiate between mitosis and meiosis with the number of divisions."],
-    ["Solve: a body starts from rest and accelerates at 2 m/s^2 for 5 s. Find its final velocity."],
-    ["Give me the whole of chemical bonding as a one-screen revision sheet."],
-    ["Frame practice MCQs on Newton's laws and show where students lose marks."],
+    ["Explain Photoelectric Effect"],
+    ["Generate 10 MCQs from Thermodynamics"],
+    ["Give quick revision notes for Cell Cycle"],
 ]
 
 CSS = """
-.gradio-container {max-width: 1240px !important;}
-#neet-header {margin-bottom: 0.25rem;}
-#neet-sub {color: #6b7280; margin-top: 0; margin-bottom: 1rem;}
-#neet-status {min-height: 2.2rem; font-size: 0.92rem;}
-#neet-mode-help {font-size: 0.86rem; color: #4b5563; margin-top: -0.4rem;}
-.source-card {line-height: 1.35;}
+:root {--genie-primary: #5b4bdb; --genie-ink: #17233c; --genie-muted: #64748b;}
+.gradio-container {max-width: 1320px !important; padding: 1.25rem 2rem 2.5rem !important;
+  color: var(--genie-ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;}
+#neet-header {margin: 0; color: #35268f; letter-spacing: -0.035em;}
+#neet-header h1 {font-size: clamp(2rem, 4vw, 2.8rem); margin-bottom: 0.2rem;}
+#neet-sub {color: var(--genie-muted); font-size: 1.12rem; margin: 0 0 1.25rem;}
+#neet-status {min-height: 2.2rem; font-size: 0.94rem; color: #475569;}
+#neet-mode-help {font-size: 0.88rem; color: #64748b;}
+.source-card {line-height: 1.5;}
+@media (max-width: 700px) {
+  .gradio-container {padding: 0.85rem !important;}
+  #neet-sub {font-size: 1rem;}
+}
 """
 
 
@@ -249,11 +234,35 @@ def _status_line(message: str) -> str:
 
 
 def _mode_help(mode: AnswerMode) -> str:
-    """Sidebar hint describing the sections the selected mode produces."""
-    return (
-        f"{mode.emoji} **{mode.label}** - {mode.description}\n\n"
-        f"Sections: {format_contract(mode)}"
+    """A short student-facing explanation of the selected answer style."""
+    return f"{mode.emoji} **{mode.label}** — {mode.description}"
+
+
+def readiness_markdown(status: dict[str, Any]) -> str:
+    """The three startup promises a student can understand at a glance."""
+    names = (
+        ("knowledge_base", "Knowledge Base"),
+        ("llm", "LLM"),
+        ("retrieval", "Retrieval"),
     )
+    checks = status.get("checks") or {}
+    lines = []
+    for key, label in names:
+        ready = bool((checks.get(key) or {}).get("ready"))
+        lines.append(f"{'✅' if ready else '⚠️'} **{label} {'Ready' if ready else 'Needs Attention'}**")
+    lines.extend(["", str(status.get("student_message") or "Checking your study tools…")])
+    return "  \n".join(lines)
+
+
+def _student_progress(payload: dict[str, Any]) -> str:
+    node = str(payload.get("node") or "")
+    return {
+        "router": "Understanding your question…",
+        "retrieval": "Finding the right textbook explanation…",
+        "answer": "Writing a clear NEET-focused answer…",
+        "llm": "Connecting to Genie…",
+        "graph": "Preparing your study session…",
+    }.get(node, "Genie is working on your answer…")
 
 
 def _history_for_model(chat: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -266,23 +275,14 @@ def _history_for_model(chat: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _completion_status(result: TutorResult, settings: Settings) -> str:
-    """Final status line: routing decision, mode, timings and warnings."""
-    mode = AnswerMode.coerce(getattr(result, "mode", None), default=settings.answer_mode)
-    parts = [
-        f"**Subject:** {result.subject}",
-        f"**Intent:** {result.intent}",
-        f"**Mode:** {mode.emoji} {mode.label}",
-        f"**Sources:** {len(result.citations)}",
-        f"**Time:** {format_seconds(result.total_seconds)}",
-        f"**Model:** `{settings.llm_model}`" if settings.llm_backend == "hf" else "**Model:** mock backend",
-    ]
-    line = " · ".join(parts)
-    if result.notices:
-        warnings = "\n".join(f"- {notice}" for notice in result.notices)
-        line += f"\n\n**Notes**\n{warnings}"
+    """A concise student receipt, without routing or model diagnostics."""
     if result.error:
-        line += f"\n\n**Error:** `{result.error}`"
-    return line
+        return "**Status:** Genie could not finish this answer. Please try again."
+    parts = [f"**Subject:** {str(result.subject).title()}"]
+    if result.citations:
+        parts.append(f"{len(result.citations)} textbook reference(s)")
+    parts.append(f"Answered in {format_seconds(result.total_seconds)}")
+    return " · ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -302,8 +302,8 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
         chat: list[dict[str, Any]] | None,
         subject: str,
         mode: str,
-        top_k: float,
-        stream_enabled: bool,
+        top_k: float | None = None,
+        stream_enabled: bool | None = None,
     ) -> Iterator[tuple[list[dict[str, Any]], str, str]]:
         history = list(chat or [])
         text = (message or "").strip()
@@ -322,7 +322,9 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
         def snapshot(answer: str) -> list[dict[str, Any]]:
             return [*history, {"role": "assistant", "content": answer}]
 
-        streaming = bool(stream_enabled and settings.stream_tokens)
+        streaming = bool(settings.stream_tokens if stream_enabled is None else stream_enabled)
+        streaming = streaming and settings.stream_tokens
+        retrieval_count = int(top_k or settings.top_k)
         events: "queue.Queue[tuple[str, Any]]" = queue.Queue()
         box: dict[str, Any] = {}
 
@@ -338,7 +340,7 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
                     text,
                     history=prior_turns,
                     subject=subject or "auto",
-                    top_k=int(top_k),
+                    top_k=retrieval_count,
                     mode=answer_mode,
                     on_event=on_event,
                     on_token=on_token if streaming else None,
@@ -358,7 +360,7 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
         thread.start()
 
         partial = ""
-        status = _status_line(f"{answer_mode.emoji} {answer_mode.label} - starting the agent graph")
+        status = _status_line("Genie is thinking about your doubt…")
         last_emit = 0.0
         yield snapshot(partial), status, ""
 
@@ -373,7 +375,7 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
                     last_emit = now
                     yield snapshot(partial), status, ""
             elif kind == "event" and isinstance(payload, dict):
-                status = _status_line(str(payload.get("message", "Working")))
+                status = _status_line(_student_progress(payload))
                 yield snapshot(partial), status, ""
 
         thread.join(timeout=5.0)
@@ -382,9 +384,8 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
             error = box.get("error")
             logger.error("Turn produced no result: %s", error)
             message = (
-                "**The request failed unexpectedly.**\n\n"
-                f"`{type(error).__name__ if error else 'UnknownError'}: {error}`\n\n"
-                "Please retry; if it persists check `logs/neet_tutor.log`."
+                "**Genie could not finish that answer.** Please try again in a moment. "
+                "You can also try a shorter question or use Try reconnecting."
             )
             yield snapshot(message), _status_line("Failed"), ""
             return
@@ -403,21 +404,24 @@ def build_ask_genie_tab(
     settings: Settings,
     tutor: NEETTutor,
     responder: Any,
-    capabilities: Any,
+    platform: Any,
 ) -> dict[str, Any]:
-    """Create the Ask Genie module - the original chat, widget for widget.
+    """A calm chat workspace with only student-relevant controls."""
+    readiness = tutor.startup_status()
+    ready = bool(readiness["ready"])
 
-    The brief is explicit: reuse the coach interface, do not replace it.  The
-    chatbot, the question box, the four answer modes, the subject override, the
-    passage slider, the streaming switch, the knowledge-base sidebar and every
-    handler are the ones the tutor shipped with; only the tab name changed.  The
-    refs are returned so the module tabs (Learn, Revision Hub) and the Dashboard
-    shortcuts can pre-fill a doubt once the whole navigation exists.
-    """
+    gr.Markdown(
+        "## 🤖 Ask Genie\n"
+        "Ask a concept, numerical, MCQ or revision question. Genie explains it in a "
+        "NEET-focused way and shows the textbook references used."
+    )
     with gr.Row():
-        with gr.Column(scale=3):
+        with gr.Column(scale=3, elem_classes=["genie-chat-card"]):
+            readiness_box = gr.Markdown(
+                readiness_markdown(readiness), elem_classes=["genie-readiness"]
+            )
             chatbot = gr.Chatbot(
-                label="Conversation",
+                label="Chat with Genie",
                 type="messages",
                 height=settings.chatbot_height,
                 show_copy_button=True,
@@ -427,59 +431,51 @@ def build_ask_genie_tab(
                 ],
             )
             message_box = gr.Textbox(
-                placeholder="Ask any NEET doubt, e.g. 'Why does SN1 favour tertiary carbocations?'",
-                label="",
+                placeholder="Type your NEET doubt here…",
+                label="Your question",
                 autofocus=True,
-                lines=1,
-                max_lines=4,
+                lines=2,
+                max_lines=5,
+                interactive=ready,
             )
             with gr.Row():
-                send_btn = gr.Button("Ask", variant="primary", scale=3)
+                send_btn = gr.Button(
+                    "Send to Genie", variant="primary", scale=3, interactive=ready
+                )
                 clear_btn = gr.ClearButton([chatbot], value="New chat", scale=1)
             status_box = gr.Markdown(
-                _status_line("Ready. Ask your first doubt."), elem_id="neet-status"
+                _status_line("Ready for your doubt." if ready else "Answers are paused until Genie reconnects."),
+                elem_id="neet-status",
             )
-            with gr.Accordion("Sources from your textbooks", open=False):
+            gr.Examples(examples=EXAMPLES, inputs=[message_box], label="Suggested questions")
+            with gr.Accordion("📖 Textbook references", open=False):
                 sources_box = gr.Markdown(
-                    "_Sources appear here after the first answer._",
+                    "_References appear here after Genie answers._",
                     elem_classes=["source-card"],
                 )
-            gr.Examples(examples=EXAMPLES, inputs=[message_box], label="Try one")
 
-        with gr.Column(scale=1):
-            gr.Markdown("### Session settings")
+        with gr.Column(scale=1, elem_classes=["genie-side-card"]):
+            gr.Markdown(dashboard_ui.student_profile_md(platform.progress))
             subject_box = gr.Dropdown(
-                choices=SUBJECT_CHOICES,
+                choices=[
+                    ("✨ Detect automatically", "auto"),
+                    ("🕶️ Physics", "physics"),
+                    ("🧪 Chemistry", "chemistry"),
+                    ("🌱 Biology", "biology"),
+                    ("📚 General", "general"),
+                ],
                 value="auto",
                 label="Subject",
-                info="'auto' lets the router agent decide. Picking a subject overrides it.",
             )
             mode_box = gr.Radio(
                 choices=AnswerMode.ui_choices(),
                 value=settings.answer_mode.value,
-                label="Answer mode",
-                info="How the coach shapes every reply - "
-                + " / ".join(f"{mode.emoji} {mode.label}" for mode in AnswerMode),
+                label="How should Genie answer?",
             )
             mode_md = gr.Markdown(
                 _mode_help(settings.answer_mode), elem_id="neet-mode-help"
             )
-            top_k_box = gr.Slider(
-                minimum=2,
-                maximum=10,
-                value=settings.top_k,
-                step=1,
-                label="Passages to retrieve",
-            )
-            stream_box = gr.Checkbox(
-                value=settings.stream_tokens,
-                label="Stream the answer while it is written",
-                # The setting is the operator's kill switch for slow machines.
-                interactive=settings.stream_tokens,
-            )
-            kb_md = gr.Markdown(index_panel(tutor))
-            engine_md = gr.Markdown(settings_panel(settings, tutor))
-            reload_btn = gr.Button("Reload knowledge base", size="sm")
+            reconnect_btn = gr.Button("Try reconnecting", size="sm")
 
     mode_box.change(
         lambda choice: _mode_help(AnswerMode.coerce(choice, default=settings.answer_mode)),
@@ -490,37 +486,37 @@ def build_ask_genie_tab(
 
     send_btn.click(
         responder,
-        inputs=[message_box, chatbot, subject_box, mode_box, top_k_box, stream_box],
+        inputs=[message_box, chatbot, subject_box, mode_box],
         outputs=[chatbot, status_box, sources_box],
     ).then(lambda: "", outputs=[message_box], queue=False)
 
     message_box.submit(
         responder,
-        inputs=[message_box, chatbot, subject_box, mode_box, top_k_box, stream_box],
+        inputs=[message_box, chatbot, subject_box, mode_box],
         outputs=[chatbot, status_box, sources_box],
     ).then(lambda: "", outputs=[message_box], queue=False)
 
     clear_btn.click(
-        lambda: (_status_line("New chat started. Ask your doubt."), ""),
+        lambda: (_status_line("New chat started. What would you like to understand?"), ""),
         outputs=[status_box, sources_box],
         queue=False,
     )
 
-    reload_btn.click(
-        lambda: (index_panel(tutor), _status_line("Knowledge base reloaded from disk.")),
-        outputs=[kb_md, status_box],
-        queue=False,
-    )
+    def reconnect() -> list[Any]:
+        status = tutor.validate_startup()
+        available = bool(status["ready"])
+        return [
+            readiness_markdown(status),
+            _status_line("Ready for your doubt." if available else status["student_message"]),
+            gr.update(interactive=available),
+            gr.update(interactive=available),
+        ]
 
-    with gr.Accordion("Voice and photo doubt - extension points", open=False):
-        gr.Markdown(
-            "Two more input channels are planned in `learning/capabilities.py`, "
-            "and both would reuse this exact pipeline through "
-            "`GeniePlatform.ask()` / `listen()` / `solve_photo()`:\n\n"
-            f"{describe_capabilities(capabilities)}\n\n"
-            "_Nothing here is clickable yet - the coach works with text, which is "
-            "all this build claims._"
-        )
+    reconnect_btn.click(
+        reconnect,
+        inputs=None,
+        outputs=[readiness_box, status_box, message_box, send_btn],
+    )
 
     return {
         "chatbot": chatbot,
@@ -532,11 +528,8 @@ def build_ask_genie_tab(
         "subject": subject_box,
         "mode": mode_box,
         "mode_help": mode_md,
-        "top_k": top_k_box,
-        "stream": stream_box,
-        "knowledge": kb_md,
-        "engine": engine_md,
-        "reload": reload_btn,
+        "readiness": readiness_box,
+        "reconnect": reconnect_btn,
     }
 
 
@@ -544,165 +537,72 @@ def build_ask_genie_tab(
 # UI
 # ---------------------------------------------------------------------------
 def build_app(settings: Settings, tutor: NEETTutor | None = None) -> "gr.Blocks":
-    """Construct the Gradio Blocks app - the module tabs plus the diagnostics.
-
-    Gradio is resolved here rather than at module level, so ``app.py --check``
-    reports a missing UI dependency instead of crashing on import, and so a test
-    can inject a stand-in module (``ui.components.inject_gradio``) and build the
-    whole navigation on a machine where Gradio is not installed.
-
-    ``NEET_PLATFORM_ENABLED=false`` serves the original single-chat app: the
-    module tabs and the progress store are then never created, which is the
-    operator's kill switch if a 7B model needs every bit of RAM.
-
-    ``NEETRA_ENABLE_LEARN=false`` keeps the platform but drops the Learn tab:
-    its widgets are never instantiated.  ``learning/learn.py`` and its tests
-    are untouched, and the environment can bring the module back.
-    """
+    """Build the six-module student product and its hidden developer panel."""
     gr = genie_ui.lazy_gradio()
-
     tutor = tutor or NEETTutor(settings)
-    modular = bool(settings.platform_enabled)
-    platform = tutor.platform() if modular else None
-    registry = platform.capabilities if platform is not None else default_registry()
+    platform = tutor.platform()
 
     def count_doubt(result: TutorResult) -> None:
-        """Ask Genie keeps the platform's statistics honest."""
-        if platform is not None and getattr(result, "ok", True):
+        if getattr(result, "ok", True):
             platform.progress.bump("doubts")
 
     responder = build_responder(tutor, settings, on_result=count_doubt)
     nav = genie_ui.TabNav(gr)
-    learn_refs: dict[str, Any] | None = None  # set only when the Learn tab is built
 
     with gr.Blocks(
-        title=settings.app_name, theme=gr.themes.Soft(), css=CSS + genie_ui.PLATFORM_CSS
+        title="🧞 NEET Genie", theme=gr.themes.Soft(), css=CSS + genie_ui.PLATFORM_CSS
     ) as demo:
-        gr.Markdown(f"# {settings.app_name}", elem_id="neet-header")
-        gr.Markdown(
-            (
-                "**Doubt solving** with a grounded coach chat, **practice tests** and "
-                "**full mock exams** with NEET marking, **progress analytics** that find "
-                "the weak topics, **revision planning** in one click - your personal "
-                "NEET preparation assistant, grounded in **your** textbooks with chapter "
-                "and page citations."
-            )
-            if modular
-            else (
-                f"{settings.app_tagline} - a NEET faculty with 15 years of NCERT teaching, answering in "
-                "a fixed coach format and grounded in **your** textbooks, with chapter and page "
-                "citations. _Module tabs are switched off (`NEET_PLATFORM_ENABLED=false`)._"
-            ),
-            elem_id="neet-sub",
-        )
+        gr.Markdown("# 🧞 NEET Genie", elem_id="neet-header")
+        gr.Markdown("Every NEET Doubt. One Wish Away.", elem_id="neet-sub")
 
-        with gr.Tabs() as tabs:
+        with gr.Tabs(selected="dashboard") as tabs:
             nav.attach(tabs)
+            with nav.tab("🏠 Dashboard", "dashboard"):
+                dashboard_refs = dashboard_ui.build(gr, platform, settings, nav)
+            with nav.tab("📚 Learn", "learn"):
+                learn_refs = learn_ui.build(gr, platform, settings, nav, autowire=False)
+            with nav.tab("🎯 Practice", "practice"):
+                practice_refs = practice_ui.build(gr, platform, settings, nav)
+            with nav.tab("🤖 Ask Genie", "ask-genie"):
+                genie_refs = build_ask_genie_tab(gr, settings, tutor, responder, platform)
+            with nav.tab("📈 Progress", "progress"):
+                progress_ui.build(gr, platform, settings, nav)
+            with nav.tab("📝 Revision Hub", "revision"):
+                revision_refs = revision_ui.build(gr, platform, settings, nav, autowire=False)
 
-            if modular:
-                # ------------------------------------------------------ ask genie
-                # the primary module: doubt solving leads the navigation
-                with nav.tab("Ask Genie", "ask-genie"):
-                    genie_refs = build_ask_genie_tab(gr, settings, tutor, responder, registry)
+        shared_targets = {
+            "ask_mode": genie_refs["mode"],
+            "ask_message": genie_refs["message"],
+            "practice_scope": practice_refs["scope"],
+        }
+        learn_ui.wire(gr, platform, learn_refs, nav=nav, targets=shared_targets)
+        revision_ui.wire(gr, platform, revision_refs, nav=nav, targets=shared_targets)
+        dashboard_ui.wire(gr, platform, shared_targets, nav, dashboard_refs)
 
-                # -------------------------------------------------- dashboard
-                with nav.tab("Dashboard", "dashboard"):
-                    dashboard_refs = dashboard_ui.build(gr, platform, settings, nav)
-
-                # --------------------------------------------------- practice
-                with nav.tab("Practice", "practice"):
-                    practice_refs = practice_ui.build(gr, platform, settings, nav)
-
-                # ------------------------------------------------------- learn
-                if settings.learn_enabled:
-                    # optional study pages: hidden by NEETRA_ENABLE_LEARN=false
-                    # (wired below, once the Ask Genie controls exist)
-                    with nav.tab("Learn", "learn"):
-                        learn_refs = learn_ui.build(gr, platform, settings, nav, autowire=False)
-
-                # --------------------------------------------------- progress
-                with nav.tab("Progress", "progress"):
-                    progress_ui.build(gr, platform, settings, nav)
-
-                # ----------------------------------------------- revision hub
-                with nav.tab("Revision Hub", "revision"):
-                    revision_refs = revision_ui.build(gr, platform, settings, nav, autowire=False)
-
-            else:
-                # ------------------------------------------------------ ask genie
-                with gr.Tab("Ask Genie"):
-                    genie_refs = build_ask_genie_tab(gr, settings, tutor, responder, registry)
-
-            # --------------------------------------------- knowledge base
-            with gr.Tab("Knowledge base"):
-                gr.Markdown("## Indexed study material")
-                gr.Markdown(
-                    "Drop textbook PDFs into the subject folders and re-run ingestion:\n\n"
-                    "```bash\n"
-                    "python -m rag.ingest --rebuild     # full rebuild\n"
-                    "python -m rag.ingest --append      # add only new pages\n"
-                    "```\n\n"
-                    "Folder layout drives the subject metadata:\n\n"
-                    "```text\n"
-                    "data/\n"
-                    "├── physics/      *.pdf\n"
-                    "├── chemistry/    *.pdf\n"
-                    "└── biology/      *.pdf\n"
-                    "```\n\n"
-                    "Scanned PDFs without a text layer must be OCR'd first "
-                    "(`ocrmypdf input.pdf output.pdf`)."
-                )
-                kb_full = gr.Markdown(index_panel(tutor) + "\n\n" + settings_panel(settings, tutor))
-                kb_refresh = gr.Button("Refresh", size="sm")
-                kb_refresh.click(
-                    lambda: index_panel(tutor) + "\n\n" + settings_panel(settings, tutor),
-                    outputs=[kb_full],
-                )
-
-            # ----------------------------------------------------- coach persona
-            with gr.Tab("Coach"):
-                gr.Markdown("## NEETra AI - the Neet Genie coach persona, format and answer modes")
-                gr.Markdown(coach_panel(settings))
-
-            # ----------------------------------------------------- architecture
-            with gr.Tab("Architecture"):
-                gr.Markdown(
-                    "## How a question is answered\n\n"
-                    "1. **Subject Router Agent** - asks the LLM for strict JSON "
-                    "(`subject`, `intent`, `confidence`) with a keyword fallback.\n"
-                    "2. **RAG Retrieval Agent** - FAISS similarity search filtered by subject, "
-                    "score thresholding, deduplication and a character-budgeted context block "
-                    "(the answer mode only scales how many passages are requested).\n"
-                    "3. **Answer Generation Agent** - the Neet Genie coach persona + grounding rules + the "
-                    "selected mode's section contract, with token streaming and post-processing.\n"
-                    "4. **Coach format repair** - the mode's section headings are standardised and "
-                    "any skipped section is filled from the retrieved passages (never invented).\n\n"
-                    "Every step is timed and logged; failures are converted into chat messages instead "
-                    "of tracebacks."
-                )
-                gr.Markdown(architecture_panel(tutor))
-                gr.Markdown("## Platform modules")
-                gr.Markdown(
-                    platform_panel(platform)
-                    if platform is not None
-                    else "_Module tabs are switched off (`NEET_PLATFORM_ENABLED=false`), "
-                    "so no platform services were created._"
-                )
-
-        # ------------------------------------------------- cross-tab wiring
-        # Every module tab is built now, so the shortcuts may reach into the
-        # Ask Genie controls and the Practice scope picker.
-        if modular:
-            shared_targets = {
-                "ask_mode": genie_refs["mode"],
-                "ask_message": genie_refs["message"],
-                "practice_scope": practice_refs["scope"],
-            }
-            if learn_refs is not None:
-                # NEETRA_ENABLE_LEARN=false: the tab was never built, so neither is its wiring
-                learn_ui.wire(gr, platform, learn_refs, nav=nav, targets=shared_targets)
-            revision_ui.wire(gr, platform, revision_refs, nav=nav, targets=shared_targets)
-            dashboard_ui.wire(gr, platform, shared_targets, nav, dashboard_refs)
+        developer_toggle = gr.Checkbox(
+            label="Developer Mode", value=False, elem_classes=["developer-toggle"]
+        )
+        with gr.Accordion("Technical diagnostics", open=False, visible=False) as developer_panel:
+            gr.Markdown(index_panel(tutor) + "\n\n" + settings_panel(settings, tutor))
+            gr.Markdown(coach_panel(settings))
+            gr.Markdown(architecture_panel(tutor))
+            gr.Markdown(platform_panel(platform))
+            health_box = gr.Markdown(
+                "```json\n" + json.dumps(tutor.health(), indent=2, default=str) + "\n```"
+            )
+            refresh_diagnostics = gr.Button("Refresh diagnostics", size="sm")
+            refresh_diagnostics.click(
+                lambda: "```json\n" + json.dumps(tutor.health(), indent=2, default=str) + "\n```",
+                inputs=None,
+                outputs=[health_box],
+                queue=False,
+            )
+        developer_toggle.change(
+            lambda enabled: gr.update(visible=bool(enabled)),
+            inputs=[developer_toggle],
+            outputs=[developer_panel],
+            queue=False,
+        )
 
     demo.queue(default_concurrency_limit=1)
     return demo
@@ -713,9 +613,7 @@ def build_app(settings: Settings, tutor: NEETTutor | None = None) -> "gr.Blocks"
 # ---------------------------------------------------------------------------
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run NEETra AI - the NEET preparation assistant (Ask Genie doubt "
-        "solving, Dashboard, Practice, Progress, Revision Hub; optional Learn "
-        "module behind NEETRA_ENABLE_LEARN)."
+        description="Run NEET Genie - Dashboard, Learn, Practice, Ask Genie, Progress and Revision Hub."
     )
     parser.add_argument("--host", default=None, help="Bind address (default: NEET_GRADIO_SERVER_NAME).")
     parser.add_argument("--port", type=int, default=None, help="Port (default: NEET_GRADIO_SERVER_PORT).")
@@ -793,6 +691,7 @@ def run_config_check(settings: Settings) -> int:
         provider_problems.append(str(exc))
 
     tutor = NEETTutor(settings)
+    readiness = tutor.validate_startup()
     health = tutor.health()
     health["dependencies"] = _dependency_report(settings)
     print(json.dumps(health, indent=2, default=str))
@@ -802,10 +701,12 @@ def run_config_check(settings: Settings) -> int:
     missing = [name for name, value in health["dependencies"].items() if value.startswith("MISSING")]
     if missing:
         problems.append(f"missing dependencies: {', '.join(missing)}")
+    if not readiness["ready"]:
+        problems += [f"{name}: {detail}" for name, detail in readiness["errors"].items()]
     if problems:
-        print("\n[FAILED] " + "; ".join(problems), file=sys.stderr)
+        print("\n[FAILED] " + "; ".join(dict.fromkeys(problems)), file=sys.stderr)
         return 1
-    print("\n[OK] configuration, prompts and dependencies look good.", file=sys.stderr)
+    print("\n[OK] knowledge base, answer generation and retrieval are ready.", file=sys.stderr)
     return 0
 
 
@@ -866,15 +767,12 @@ def main(argv: list[str] | None = None) -> int:
         return run_ingest_command(settings, append=args.ingest_append, source=args.source)
 
     tutor = NEETTutor(settings)
-    if not tutor.index_status()["ready"]:
-        logger.warning("No FAISS index found - the tutor will answer without retrieval")
-    if tutor.prompts.validate():
-        logger.error("Prompt validation failed: %s", tutor.prompts.validate())
-    logger.info(
-        "Platform modules: %s (%s)",
-        ", ".join(tutor.platform_status()["modules"]),
-        "enabled" if settings.platform_enabled else "disabled",
-    )
+    readiness = tutor.validate_startup()
+    if readiness["ready"]:
+        logger.info("Startup verified: knowledge base, LLM and retrieval are ready")
+    else:
+        # The learning shell can still show progress, but Ask Genie remains gated.
+        logger.error("Startup readiness failed: %s", readiness["errors"])
 
     demo = build_app(settings, tutor)
     demo.launch(

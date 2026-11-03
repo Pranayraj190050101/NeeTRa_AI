@@ -222,6 +222,116 @@ def test_tutor_facade_passes_the_mode_through(
     assert result.mode == "pyq_focus"
 
 
+def test_startup_verifies_generation_and_retrieval(
+    settings: Settings, vector_store: VectorStoreManager
+) -> None:
+    class ProbeLLM(MockLLM):
+        def __init__(self, settings: Settings) -> None:
+            super().__init__(settings)
+            self.readiness_calls = 0
+
+        def generate(self, *args: Any, **kwargs: Any) -> str:
+            self.readiness_calls += 1
+            return super().generate(*args, **kwargs)
+
+    llm = ProbeLLM(settings)
+    tutor = NEETTutor(settings, llm=llm, vector_store=vector_store)
+
+    status = tutor.validate_startup()
+
+    assert llm.readiness_calls == 1
+    assert status["ready"] is True
+    assert all(check["ready"] for check in status["checks"].values())
+    assert "Ask Genie" in status["student_message"]
+    assert tutor.startup_status() == status
+
+
+def test_startup_keeps_study_pages_available_without_a_library(settings: Settings) -> None:
+    tutor = NEETTutor(
+        settings,
+        llm=MockLLM(settings),
+        vector_store=VectorStoreManager(settings),
+    )
+
+    status = tutor.validate_startup()
+
+    assert status["ready"] is False
+    assert status["checks"]["knowledge_base"]["ready"] is False
+    assert status["checks"]["llm"]["ready"] is True
+    assert status["checks"]["retrieval"]["ready"] is False
+    assert "Dashboard and Progress" in status["student_message"]
+
+
+def test_startup_detects_provider_misconfiguration(
+    settings: Settings, vector_store: VectorStoreManager
+) -> None:
+    broken = settings.model_copy(update={"llm_provider": "groq", "groq_api_key": None})
+    tutor = NEETTutor(broken, llm=MockLLM(broken), vector_store=vector_store)
+
+    status = tutor.validate_startup()
+
+    assert status["ready"] is False
+    assert status["checks"]["llm"]["ready"] is False
+    assert "answers are paused" in status["student_message"]
+    assert "llm" in status["errors"]
+
+
+def test_startup_rejects_an_empty_generation_probe(
+    settings: Settings, vector_store: VectorStoreManager
+) -> None:
+    class EmptyLLM(MockLLM):
+        def generate(self, *args: Any, **kwargs: Any) -> str:
+            return ""
+
+    tutor = NEETTutor(settings, llm=EmptyLLM(settings), vector_store=vector_store)
+
+    status = tutor.validate_startup()
+
+    assert status["checks"]["llm"]["ready"] is False
+    assert status["checks"]["retrieval"]["ready"] is True
+    assert "empty readiness response" in status["errors"]["llm"]
+    assert "empty readiness response" not in status["student_message"]
+
+
+def test_startup_reports_retrieval_failure_without_raw_details(
+    settings: Settings,
+    vector_store: VectorStoreManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_search(*args: Any, **kwargs: Any) -> list[Any]:
+        raise RuntimeError("private retrieval failure")
+
+    monkeypatch.setattr(vector_store, "search", fail_search)
+    tutor = NEETTutor(settings, llm=MockLLM(settings), vector_store=vector_store)
+
+    status = tutor.validate_startup()
+
+    assert status["checks"]["llm"]["ready"] is True
+    assert status["checks"]["retrieval"]["ready"] is False
+    assert "private retrieval failure" in status["errors"]["retrieval"]
+    assert "private retrieval failure" not in status["student_message"]
+    assert "Dashboard and Progress" in status["student_message"]
+
+
+def test_startup_diagnostics_mask_provider_secrets(
+    settings: Settings, vector_store: VectorStoreManager
+) -> None:
+    secret = "gsk_student_secret_123"
+    configured = settings.model_copy(update={"groq_api_key": secret})
+
+    class RejectingLLM(MockLLM):
+        def generate(self, *args: Any, **kwargs: Any) -> str:
+            raise RuntimeError(f"401 authentication failed for {secret}")
+
+    tutor = NEETTutor(configured, llm=RejectingLLM(configured), vector_store=vector_store)
+
+    status = tutor.validate_startup()
+
+    assert "could not sign in" in status["student_message"]
+    assert secret not in str(status)
+    assert "***" in status["errors"]["llm"]
+
+
 def test_coach_settings_are_configurable_and_reported(settings: Settings) -> None:
     custom = Settings(
         **{

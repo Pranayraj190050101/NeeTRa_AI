@@ -42,7 +42,8 @@ def test_responder_yields_chat_status_and_sources(
     assert [message["role"] for message in chat] == ["user", "assistant"]
     assert chat[0]["content"] == "Why is light required for photosynthesis?"
     assert "Mock answer" in chat[1]["content"]
-    assert "**Subject:**" in status and "**Intent:**" in status and "**Mode:**" in status
+    assert "**Subject:**" in status and "textbook reference" in status
+    assert "Intent" not in status and "Mode" not in status
     assert "\U0001f4d8 Concept Explanation" in chat[1]["content"]
     assert "plant_physiology.pdf" in sources and "p.45" in sources
 
@@ -95,7 +96,7 @@ def test_responder_reports_unexpected_failure(settings: Settings) -> None:
 
     chat, status, sources = _run(responder, "Explain the mole concept.")[-1]
 
-    assert "failed unexpectedly" in chat[-1]["content"]
-    assert "boom" in chat[-1]["content"]
+    assert "could not finish" in chat[-1]["content"]
+    assert "boom" not in chat[-1]["content"]
     assert "Failed" in status
     assert sources == ""

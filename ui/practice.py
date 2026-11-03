@@ -48,18 +48,15 @@ def practice_intro_md(platform: GeniePlatform, settings: Any) -> str:
     scope_rows = [(scope.emoji + " " + scope.label, scope.description) for scope in TestScope]
     return "\n".join(
         [
-            "### \U0001f9e9 Practice - tests built from your own index",
+            "### \U0001f9e9 Practice - test yourself and learn from every mistake",
             "",
             table(("Test type", "What it does"), scope_rows),
             "",
             f"- Questions per test: 2-{MAX_TEST_QUESTIONS} (default {settings.test_question_count})",
             f"- Marking: +{settings.marks_correct:g} correct, {settings.marks_incorrect:g} wrong "
             "(negative marking is on, exactly as in NEET)",
-            f"- Chapters available: {len(catalog.chapters)} "
-            f"({'index ready' if catalog.subjects else 'nothing indexed yet - use a topic name'}), "
-            f"max {len(catalog.names('physics'))} physics / {len(catalog.names('chemistry'))} chemistry / "
-            f"{len(catalog.names('biology'))} biology",
-            f"- Every submitted test is written to `{platform.progress.file}`",
+            f"- Chapters available: {len(catalog.chapters)} across your study library",
+            "- Every submitted test updates your Dashboard, weak areas and study streak",
         ]
     )
 
@@ -161,7 +158,7 @@ def build(
             value=None,
             allow_custom_value=True,
             label="Chapter / topic",
-            info="Chapters come from your index; a topic can be any phrase.",
+            info="Choose a chapter or type any topic you want to practice.",
         )
         count_box = gr.Slider(
             minimum=2,
@@ -186,7 +183,7 @@ def build(
 
     review_box = gr.Markdown()
     score_box = gr.Markdown()
-    with gr.Accordion("Passages the questions were built from", open=False):
+    with gr.Accordion("📖 Textbook references", open=False):
         citations_box = gr.Markdown("_Appears with the first generated test._")
 
     weak_btn = gr.Button("Revise my weak areas in the Revision Hub")

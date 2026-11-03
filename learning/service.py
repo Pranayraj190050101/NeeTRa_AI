@@ -195,11 +195,8 @@ class GeniePlatform:
         catalog = self.catalog()
         index = self._index_summary()
         motivation = self.motivation(stats)
-        # Ask Genie leads the product now; Learn is optional and disappears from
-        # the module list when NEETRA_ENABLE_LEARN=false (mirrors the tab bar).
-        modules = ["Learn", "Practice", "Ask Genie", "Progress", "Revision Hub"]
-        if not self.settings.learn_enabled:
-            modules = ["Ask Genie", "Dashboard", "Practice", "Progress", "Revision Hub"]
+        # Keep dashboard metadata aligned with the six student-facing modules.
+        modules = ["Dashboard", "Learn", "Practice", "Ask Genie", "Progress", "Revision Hub"]
         return {
             "welcome": {
                 "name": self.settings.app_name,

@@ -99,8 +99,7 @@ class AnswerAgent(BaseAgent):
         answer, notices = self._postprocess(raw, mode=mode, subject=subject, context=context, notices=notices)
         if not answer:
             answer = (
-                "The model returned an empty response. Please rephrase the question or try again - "
-                "if this repeats, check the model logs with NEET_LOG_LEVEL=DEBUG."
+                "Genie did not receive a complete answer. Please rephrase your doubt or try again."
             )
             add_notice(notices, "The language model produced an empty answer.")
 

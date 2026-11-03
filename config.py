@@ -7,7 +7,7 @@ automatically).  Provider selection deliberately uses prefix-free names so a
 
     LLM_PROVIDER=groq            # groq | huggingface | mock
     GROQ_API_KEY=gsk_...         # required when LLM_PROVIDER=groq
-    GROQ_MODEL=qwen/qwen3-32b
+    GROQ_MODEL=qwen/qwen3.8-27b
     NEET_LLM_MODEL=Qwen/Qwen2.5-3B-Instruct
     NEET_TOP_K=6
 
@@ -96,8 +96,8 @@ class Settings(BaseSettings):
     # Product name shown in the Gradio page title, header and reports.  The
     # coach persona inside the prompts is still "Neet Genie" (see
     # prompts/persona.txt); override this with NEET_APP_NAME.
-    app_name: str = "NEETra AI"
-    app_tagline: str = "AI NEET Coach"
+    app_name: str = "🧞 NEET Genie"
+    app_tagline: str = "Every NEET Doubt. One Wish Away."
     app_version: str = "1.1.0"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_to_file: bool = True
@@ -156,7 +156,7 @@ class Settings(BaseSettings):
     # --- Groq (hosted, OpenAI-compatible) ---------------------------------
     #: Never printed; surfaced only through :func:`mask_secret`.
     groq_api_key: str | None = Field(default=None, validation_alias="GROQ_API_KEY")
-    groq_model: str = Field(default="qwen/qwen3-32b", validation_alias="GROQ_MODEL")
+    groq_model: str = Field(default="qwen/qwen3.8-27b", validation_alias="GROQ_MODEL")
     groq_temperature: float = Field(default=0.2, ge=0.0, le=2.0, validation_alias="GROQ_TEMPERATURE")
     groq_top_p: float = Field(default=0.9, gt=0.0, le=1.0, validation_alias="GROQ_TOP_P")
     groq_max_tokens: int = Field(default=2048, ge=64, le=8192, validation_alias="GROQ_MAX_TOKENS")
@@ -308,7 +308,7 @@ class Settings(BaseSettings):
                 f"The '{provider}' provider has no model configured. Set "
                 f"{variable} to a model id (for example "
                 + (
-                    "'qwen/qwen3-32b')."
+                    "'qwen/qwen3.8-27b')."
                     if provider == "groq"
                     else "'Qwen/Qwen2.5-7B-Instruct')."
                 )

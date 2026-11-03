@@ -107,7 +107,7 @@ Because `Settings` uses `env_prefix="NEET_"` with `extra="ignore"`, a
 |----------------------|-----------------------------------------------|--------|
 | Choose provider      | `LLM_PROVIDER` = `groq` \| `huggingface` \| `mock` | none |
 | Groq key             | `GROQ_API_KEY`                                | none   |
-| Groq model           | `GROQ_MODEL` (default `qwen/qwen3-32b`)       | none   |
+| Groq model           | `GROQ_MODEL` (default `qwen/qwen3.8-27b`)       | none   |
 | Groq sampling        | `GROQ_TEMPERATURE` / `GROQ_TOP_P` / `GROQ_MAX_TOKENS` | none |
 | **Legacy** provider  | `NEET_LLM_BACKEND` = `hf` \| `mock`           | `NEET_` |
 | Legacy HF model      | `NEET_LLM_MODEL`                              | `NEET_` |

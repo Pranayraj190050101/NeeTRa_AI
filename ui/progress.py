@@ -8,7 +8,6 @@ through the store so the schema and the atomic rename stay in one place.
 
 from __future__ import annotations
 
-import json
 from typing import Any, Mapping
 
 from learning.progress import ProgressStore
@@ -50,8 +49,8 @@ def headline_md(store: ProgressStore) -> str:
     return (
         row
         + "\n\n"
-        + f"_History file: `{store.file}` · last activity {esc(stats['last_studied']) or 'never'}_\n\n"
-        + f"**Non-test activity:** {stats['doubts']} doubt(s) asked · "
+        + f"_Last studied: {esc(stats['last_studied']) or 'No study activity yet'}_\n\n"
+        + f"**Learning activity:** {stats['doubts']} doubt(s) asked · "
         f"{stats['chapter_pages']} chapter page(s) studied · {stats['revision_sheets']} revision sheet(s)"
     )
 
@@ -167,9 +166,8 @@ def progress_report_md(platform: GeniePlatform) -> str:
         # an unreadable history was kept, not erased - tell the student where it is
         parts.insert(
             1,
-            "\u26a0\ufe0f An unreadable progress file was saved to **"
-            f"`{store.last_quarantine}`** before starting a fresh log. "
-            "If it holds study history you want back, fix the JSON and restart the app.",
+            "⚠️ Your earlier study history could not be read, so a backup was kept before "
+            "starting fresh. You can continue studying normally.",
         )
     return "\n\n".join(parts)
 
@@ -203,11 +201,6 @@ def build(
     with gr.Accordion("Test timeline", open=False):
         activity_box = gr.Markdown(activity_md(store))
         daily_box = gr.Markdown(daily_md(store))
-    with gr.Accordion("Raw stored document (JSON)", open=False):
-        gr.Markdown(f"_Location:_ `{store.file}`")
-        raw_box = gr.Markdown(_raw_md(store))
-        show_btn = gr.Button("Reload JSON", size="sm")
-
     refs: dict[str, Any] = {
         "headline": headline_box,
         "subjects": subjects_box,
@@ -215,22 +208,12 @@ def build(
         "weak": weak_box,
         "activity": activity_box,
         "daily": daily_box,
-        "raw": raw_box,
         "refresh": refresh_btn,
         "practice": practice_btn,
         "reset": reset_btn,
-        "show": show_btn,
     }
     wire(gr, platform, settings, refs, nav=nav)
     return refs
-
-
-def _raw_md(store: ProgressStore) -> str:
-    """The stored document itself, so the JSON format is inspectable."""
-    text = json.dumps(store.load(force=True), indent=2, sort_keys=True, default=str)
-    if len(text) > 6000:
-        text = text[:6000] + "\n... (truncated - open the file for the whole history)"
-    return f"```json\n{text}\n```"
 
 
 def wire(
@@ -255,9 +238,6 @@ def wire(
             daily_md(store),
         ]
 
-    def show_raw() -> str:
-        return _raw_md(platform.progress)
-
     def nudge_practice() -> list[Any]:
         areas = platform.progress.weak_areas(limit=3)
         if not areas:
@@ -279,7 +259,6 @@ def wire(
         refs["daily"],
     ]
     refs["refresh"].click(reload, inputs=None, outputs=reload_outputs, queue=False)
-    refs["show"].click(show_raw, inputs=None, outputs=[refs["raw"]], queue=False)
 
     practice_outputs = [refs["weak"]] + (nav.outputs if nav is not None else [])
     refs["practice"].click(nudge_practice, inputs=None, outputs=practice_outputs, queue=False)
@@ -288,8 +267,7 @@ def wire(
         platform.progress.clear()
         store = platform.progress
         return [
-            "**History cleared.** The JSON file now holds an empty document - "
-            f"`{store.file}`",
+            "**History cleared.** Your Dashboard is ready for a fresh study plan.",
             subject_table_md(store),
             chapter_table_md(store),
             weak_areas_table_md(store, threshold=settings.weak_accuracy_threshold),

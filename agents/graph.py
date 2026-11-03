@@ -213,8 +213,8 @@ class TutorGraph:
         except Exception as exc:  # graph-level failure (should be rare)
             logger.exception("Graph execution failed")
             return TutorResult.failure(
-                "Something went wrong while answering. Please retry - the full traceback is in "
-                f"logs/neet_tutor.log.\n\n`{exc}`",
+                "Genie could not finish that answer. Please try again, or ask the doubt in a "
+                "shorter way. Your study progress is still safe.",
                 error=str(exc),
             )
 
@@ -288,10 +288,9 @@ class TutorGraph:
             "error": f"{node}: {detail}",
             "mode": AnswerMode.coerce(state.get("mode"), default=self.settings.answer_mode).value,
             "answer": (
-                f"**I could not complete this request** (step: `{node}`).\n\n"
-                f"{detail}\n\n"
-                "If this is about the model or the index, check the README troubleshooting section "
-                "and `logs/neet_tutor.log`."
+                "**Genie could not finish that answer.** Please try again in a moment. "
+                "If the problem continues, use **Try reconnecting** on the Ask Genie page. "
+                "You can still review Dashboard and Progress meanwhile."
             ),
             "citations": [],
             "notices": notices,

@@ -27,15 +27,15 @@ __all__ = [
 ]
 
 INTRO = (
-    "Pick a subject and a chapter: Genie writes the study page from the passages indexed "
-    "from your own PDFs, in the four fixed sections, with file and page citations."
+    "Pick a subject and chapter for a guided study page with a summary, high-yield "
+    "concepts, NEET points, quick revision notes and textbook references."
 )
 
 
 def learn_intro_md(catalog: ChapterCatalog) -> str:
     """Section contract plus the chapters that are actually available."""
     lines = [
-        f"### \U0001f4da Learn - {len(catalog.chapters)} indexed chapter(s)",
+        f"### \U0001f4da Learn - {len(catalog.chapters)} chapter(s) in your study library",
         "",
         INTRO,
         "",
@@ -47,24 +47,21 @@ def learn_intro_md(catalog: ChapterCatalog) -> str:
             (
                 chapter.subject.title(),
                 chapter.name,
-                chapter.chunks or catalog.size_of(chapter.subject) or "-",
+                "Guided study page",
                 chapter.file_name,
             )
             for chapter in catalog.chapters
         ]
-        lines.append("\n**Available chapters**\n\n" + table(("Subject", "Chapter", "Chunks", "Source"), rows))
+        lines.append("\n**Available chapters**\n\n" + table(("Subject", "Chapter", "Study sections", "Book"), rows))
     return "\n".join(lines)
 
 
 def empty_catalog_md() -> str:
     """What to tell a student when nothing is indexed."""
     return (
-        "**No chapters are indexed yet.**\n\n"
-        "Learn reads its chapter list from your FAISS index, so put the textbook PDFs under "
-        "`data/physics`, `data/chemistry` or `data/biology` and run:\n\n"
-        "```bash\npython -m rag.ingest --rebuild\n```\n\n"
-        "Then press *Refresh chapters*. The free-text topic box works meanwhile and grounds "
-        "whatever the index already holds."
+        "**Your study library is being prepared.**\n\n"
+        "You can still type a topic below or ask Genie a doubt. Once your NCERT books are "
+        "available, their chapters will appear here automatically."
     )
 
 
@@ -72,7 +69,7 @@ def chapter_choices(catalog: ChapterCatalog, subject: str | None) -> list[tuple[
     """Chapter dropdown choices for one subject (all subjects when blank)."""
     return [
         (
-            f"{chapter.name} ({chapter.chunks or catalog.size_of(chapter.subject) or '?'} chunks)",
+            chapter.name,
             chapter.name,
         )
         for chapter in catalog.list(subject)
@@ -95,11 +92,9 @@ def status_md(doc: Any) -> str:
     if doc is None:
         return "**Status:** nothing generated - select a chapter or name a topic."
     icon = "\U0001f4d8" if doc.kind == "chapter" else "\U0001f50e"
-    state = "done" if doc.ok else f"failed ({esc(doc.error or 'see notes')})"
-    return (
-        f"**Status:** {icon} {esc(doc.title)} - {state} · "
-        f"{len(doc.citations)} grounded passage(s) · {len(doc.notices)} note(s)"
-    )
+    state = "ready" if doc.ok else "please try again"
+    references = f" · {len(doc.citations)} textbook reference(s)" if doc.citations else ""
+    return f"**Status:** {icon} {esc(doc.title)} — {state}{references}"
 
 
 def page_md(doc: Any, *, subject: str | None = None) -> str:
@@ -110,11 +105,11 @@ def page_md(doc: Any, *, subject: str | None = None) -> str:
         return esc(doc.markdown) or "**Generation failed.**"
     if doc.citations:
         kicker = (
-            f"_{subject.title() if subject else ''} written from {len(doc.citations)} "
-            "indexed passage(s) of your own material_".lstrip()
+            f"_{subject.title() if subject else ''} explained using {len(doc.citations)} "
+            "textbook reference(s)_".lstrip()
         )
     else:
-        kicker = "_Written without indexed passages - see the notes below._"
+        kicker = "_Written as a general study guide; textbook references were not available._"
     body = f"## {esc(doc.title)}\n\n{doc.markdown}"
     return "\n\n".join(part for part in (kicker, body, notices_md(doc.notices)) if part)
 
@@ -153,7 +148,7 @@ def build(
             value=None,
             allow_custom_value=True,
             label="Chapter",
-            info="From your index. You can also type a chapter name.",
+            info="Choose from your study library or type a chapter name.",
         )
     topic_box = gr.Textbox(
         label="Or study a free-text topic",
@@ -165,7 +160,7 @@ def build(
         refresh_btn = gr.Button("Refresh chapters", size="sm", scale=1)
     status_box = gr.Markdown("_Pick a chapter (or type a topic), then press Generate._")
     page_box = gr.Markdown()
-    with gr.Accordion("Source passages from your books", open=False):
+    with gr.Accordion("📖 Textbook references", open=False):
         citations_box = gr.Markdown("_Citations appear after the first page._")
     ask_btn = gr.Button("Ask Genie about this chapter")
     ask_md = gr.Markdown()
@@ -217,7 +212,7 @@ def wire(
         doc = study(platform, subject, chapter, topic)
         if doc is None:
             hint = empty_catalog_md() if platform.catalog().is_empty else "_Pick a chapter or name a topic._"
-            return [hint, status_md(None), "_No passages used._"]
+            return [hint, status_md(None), "_No textbook references available._"]
         return [page_md(doc, subject=subject), status_md(doc), citations_md(doc.citations)]
 
     def draft_question(chapter: str, topic: str) -> list[Any]:

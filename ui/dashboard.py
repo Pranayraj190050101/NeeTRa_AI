@@ -19,6 +19,7 @@ from ui.components import (
     esc,
     pct,
     table,
+    weak_areas_md,
 )
 
 __all__ = [
@@ -74,8 +75,8 @@ def quick_action_plan(platform: GeniePlatform, key: str) -> dict[str, Any]:
         lines.append(f"**Question drafted:** _{action['seed']}_")
     if catalog.is_empty:
         lines.append(
-            "\n**Note:** no chapters are indexed yet, so the first stop should be "
-            "`data/<subject>/` + `python -m rag.ingest --rebuild`."
+            "\n**Note:** your study library is still being prepared. You can explore "
+            "your Dashboard and Progress while it is made ready."
         )
     if stats["tests"] and action["selector"] == "scope":
         weak = platform.progress.weak_areas(limit=3)
@@ -114,21 +115,84 @@ def stats_md(stats: Mapping[str, Any]) -> str:
 
 
 def subject_cards_md(cards: list[Mapping[str, Any]]) -> str:
-    """One row per NEET subject: coverage plus performance."""
+    """Physics, Chemistry and Biology progress in student language."""
     return table(
-        ("Subject", "Chapters", "Indexed chunks", "Tests", "Accuracy", "Verdict", "Weak topics"),
+        ("Subject", "Progress", "Practice", "Current focus"),
         [
             (
-                f"{card['emoji']} {card['label']}",
-                card["chapters"],
-                card["chunks"],
-                card["tests"],
-                f"{bar(card['accuracy'], width=6)} {card['accuracy_percent']}%",
-                card["status"],
-                chip_line(card["weak_topics"], empty="-"),
+                f"{card['emoji']} **{card['label']} Progress**",
+                (
+                    f"{bar(card['accuracy'], width=8)} {card['accuracy_percent']}% accuracy"
+                    if card["questions"]
+                    else "Ready to begin"
+                ),
+                f"{card['questions']} questions · {card['tests']} test(s)",
+                chip_line(card["weak_topics"], empty="Take a practice test"),
             )
             for card in cards
         ],
+    )
+
+
+def mock_stats_md(stats: Mapping[str, Any]) -> str:
+    """Mock-test statistics without internal scoring or storage details."""
+    return table(
+        ("Mock tests", "Questions practiced", "Overall accuracy", "Marks earned"),
+        [
+            (
+                stats.get("tests", 0),
+                stats.get("questions", 0),
+                f"{bar(stats.get('accuracy', 0.0), width=8)} {pct(stats.get('accuracy', 0.0))}",
+                f"{stats.get('score', 0):g} / {stats.get('max_score', 0):g}",
+            )
+        ],
+    )
+
+
+def student_profile_md(store: Any, *, daily_goal: int = 20) -> str:
+    """Compact profile for the Dashboard and Ask Genie sidebars."""
+    stats = store.stats()
+    today = store.daily_series(days=1)[0]
+    completed = min(int(today["questions"]), daily_goal)
+    recent = store.recent_activity(limit=1)
+    activity = (
+        f"{recent[0].get('title') or recent[0].get('subject') or 'Practice test'} · "
+        f"{pct(recent[0].get('accuracy'))}"
+        if recent
+        else "No activity yet — your next study step will appear here."
+    )
+    return (
+        "### 👋 Student Profile\n\n"
+        f"**Progress:** {stats['questions']} questions · {pct(stats['accuracy'])} accuracy  \n"
+        f"**Daily Goal:** {completed}/{daily_goal} questions  \n"
+        f"**Study Streak:** 🔥 {stats['streak_days']} day(s)  \n"
+        f"**Recent Activity:** {esc(activity)}"
+    )
+
+
+def recommended_topic_md(platform: GeniePlatform) -> str:
+    """One clear next step, based on weak areas before catalog coverage."""
+    weak = platform.progress.weak_areas(limit=1)
+    if weak:
+        area = weak[0]
+        return (
+            f"### 🎯 Recommended Next Study Topic\n\n"
+            f"**Revise {esc(area.name)}** in {esc(area.subject.title())}. "
+            f"Your current accuracy is {area.accuracy_percent}%. Start with Quick Revision, "
+            "then try a short practice set."
+        )
+    chapters = platform.catalog().chapters
+    if chapters:
+        chapter = chapters[0]
+        return (
+            "### 🎯 Recommended Next Study Topic\n\n"
+            f"**Start with {esc(chapter.name)}** in {esc(chapter.subject.title())}. "
+            "Open Learn for a guided study page, then test yourself in Practice."
+        )
+    return (
+        "### 🎯 Recommended Next Study Topic\n\n"
+        "**Ask your first doubt.** Tell Genie which chapter you are studying and it will "
+        "help you choose the next step."
     )
 
 
@@ -140,40 +204,18 @@ def actions_md(actions: list[Mapping[str, Any]]) -> str:
 
 
 def dashboard_markdown(platform: GeniePlatform) -> str:
-    """The whole dashboard as one markdown document (used by tests and CLI)."""
+    """The complete student dashboard as one document (used by tests and CLI)."""
     payload = platform.dashboard()
-    welcome = payload["welcome"]
-    stats = payload["stats"]
-    head = dashboard_heading(welcome["name"], welcome["tagline"])
-    facts = table(
-        ("Module", "Ready"),
-        [
-            ("Ask Genie - the coach chat solves your doubt", "yes"),
-            ("Practice - subject / chapter / topic tests", "yes" if welcome["index_ready"] else "ungrounded"),
-            ("Progress - local JSON history", "yes"),
-            ("Revision Hub - flash notes, formulas, high yield", "yes"),
-        ]
-        + (
-            [
-                (
-                    "Learn - chapter pages from your index",
-                    "yes" if welcome["chapters"] else "index empty",
-                )
-            ]
-            if getattr(platform.settings, "learn_enabled", True)
-            else []
-        ),
-    )
     return "\n\n".join(
         [
-            head,
-            f"**Role:** {welcome['role']}  \n"
-            f"**Chapters indexed:** {welcome['chapters']} across {stats['subjects']} subject(s)  \n"
-            f"**Passages available:** {welcome['chunks']}",
-            "### Quick statistics\n\n" + stats_md(payload["stats"]),
-            "### Subjects\n\n" + subject_cards_md(payload["subjects"]),
+            "## Your NEET preparation, made simple.\n"
+            "Learn a chapter, clear doubts, practice questions and revise weak topics.",
             "### Quick actions\n\n" + actions_md(payload["actions"]),
-            "### What this build can do\n\n" + str(payload["capabilities"]),
+            student_profile_md(platform.progress),
+            "### Subject progress\n\n" + subject_cards_md(payload["subjects"]),
+            "### Mock test statistics\n\n" + mock_stats_md(payload["stats"]),
+            "### Weak areas\n\n" + weak_areas_md(platform.progress.weak_areas(limit=5)),
+            recommended_topic_md(platform),
         ]
     )
 
@@ -182,35 +224,41 @@ def dashboard_markdown(platform: GeniePlatform) -> str:
 # Gradio layout
 # ---------------------------------------------------------------------------
 def build(gr: Any, platform: GeniePlatform, settings: Any, nav: Any | None = None) -> dict[str, Any]:
-    """Create the Dashboard tab contents and return the widget references."""
+    """Create the landing dashboard and return refs for its study shortcuts."""
     payload = platform.dashboard()
-    welcome = payload["welcome"]
 
-    gr.Markdown(dashboard_heading(welcome["name"], welcome["tagline"]))
-    gr.Markdown(
-        f"**{esc(welcome['role'])}** - open **Ask Genie** and type the doubt; "
-        "practice, mock tests, analytics and revision sit around the chat. "
-        f"{payload['stats']['chapters']} chapter(s) are indexed."
+    with gr.Column(elem_classes=["genie-hero"]):
+        gr.Markdown(
+            "## Study smarter. Clear every doubt.\n"
+            "Your personal NEET study companion for learning, practice, revision and progress."
+        )
+        gr.Markdown("**New here? Start with Ask a Doubt or choose a chapter in Learn.**")
+    with gr.Row(elem_classes=["genie-actions"]):
+        ask_btn = gr.Button("✅ Ask a Doubt", variant="primary")
+        practice_btn = gr.Button("✅ Start Practice")
+        revise_btn = gr.Button("✅ Quick Revision")
+        mock_btn = gr.Button("✅ Mock Test")
+    guidance_md = gr.Markdown(
+        "**How to study:** Learn a topic → ask doubts → practice MCQs → revise weak areas."
     )
-    with gr.Row():
-        with gr.Column(scale=2):
-            stats_md_widget = gr.Markdown("### Quick statistics\n\n" + stats_md(payload["stats"]))
-            gr.Markdown("### Subjects\n\n" + subject_cards_md(payload["subjects"]))
-        with gr.Column(scale=1):
-            gr.Markdown("### Daily motivation")
-            motivation_md = gr.Markdown(f"> {esc(payload['motivation']['line'])}")
-            gr.Markdown("### Quick actions")
-            with gr.Row():
-                ask_btn = gr.Button("💬 Ask Doubt", variant="primary")
-                practice_btn = gr.Button("🧩 Practice MCQs")
-            with gr.Row():
-                revise_btn = gr.Button("⚡ Quick Revision")
-                mock_btn = gr.Button("🎯 Start Mock Test")
-            guidance_md = gr.Markdown(actions_md(payload["actions"]))
-            refresh_btn = gr.Button("Refresh dashboard", size="sm")
 
-    with gr.Accordion("Platform status and roadmap", open=False):
-        status_md = gr.Markdown(str(payload["capabilities"]))
+    with gr.Row():
+        with gr.Column(scale=2, elem_classes=["genie-main-card"]):
+            subjects_md = gr.Markdown("### 📚 Subject Progress\n\n" + subject_cards_md(payload["subjects"]))
+            stats_widget = gr.Markdown("### 📝 Mock Test Statistics\n\n" + mock_stats_md(payload["stats"]))
+            weak_widget = gr.Markdown(
+                "### 🧠 Weak Areas\n\n"
+                + weak_areas_md(
+                    platform.progress.weak_areas(limit=5),
+                    empty_hint="_Take your first practice test to discover topics that need more revision._",
+                )
+            )
+            recommendation_widget = gr.Markdown(recommended_topic_md(platform))
+        with gr.Column(scale=1, elem_classes=["genie-profile-card"]):
+            profile_widget = gr.Markdown(student_profile_md(platform.progress))
+            gr.Markdown("### 🌟 Today’s Motivation")
+            motivation_md = gr.Markdown(f"> {esc(payload['motivation']['line'])}")
+            refresh_btn = gr.Button("Refresh dashboard", size="sm")
 
     buttons = {
         "ask_doubt": ask_btn,
@@ -219,10 +267,13 @@ def build(gr: Any, platform: GeniePlatform, settings: Any, nav: Any | None = Non
         "mock_test": mock_btn,
     }
     return {
-        "stats": stats_md_widget,
+        "stats": stats_widget,
+        "subjects": subjects_md,
+        "weak": weak_widget,
+        "recommendation": recommendation_widget,
+        "profile": profile_widget,
         "motivation": motivation_md,
         "guidance": guidance_md,
-        "status": status_md,
         "buttons": buttons,
         "refresh": refresh_btn,
         "nav": nav,
@@ -269,16 +320,20 @@ def wire(
     def refresh() -> list[Any]:
         payload = platform.dashboard()
         return [
-            "### Quick statistics\n\n" + stats_md(payload["stats"]),
+            "### 📝 Mock Test Statistics\n\n" + mock_stats_md(payload["stats"]),
+            "### 📚 Subject Progress\n\n" + subject_cards_md(payload["subjects"]),
+            "### 🧠 Weak Areas\n\n" + weak_areas_md(platform.progress.weak_areas(limit=5)),
+            recommended_topic_md(platform),
+            student_profile_md(platform.progress),
             f"> {esc(payload['motivation']['line'])}",
-            actions_md(payload["actions"]),
-            str(payload["capabilities"]),
         ]
 
     dashboard_refs["refresh"].click(
         refresh,
         inputs=None,
-        outputs=[dashboard_refs["stats"], dashboard_refs["motivation"],
-                 dashboard_refs["guidance"], dashboard_refs["status"]],
+        outputs=[
+            dashboard_refs["stats"], dashboard_refs["subjects"], dashboard_refs["weak"],
+            dashboard_refs["recommendation"], dashboard_refs["profile"], dashboard_refs["motivation"],
+        ],
         queue=False,
     )

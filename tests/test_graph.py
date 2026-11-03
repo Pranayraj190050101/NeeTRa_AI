@@ -43,7 +43,8 @@ def test_graph_citation_metadata(graph: TutorGraph) -> None:
     assert citation["page"] in {7, 12, 45}
     assert 0.0 <= citation["score"] <= 1.0
     markdown = citations_to_markdown(result.citations)
-    assert "score" in markdown
+    assert "score" not in markdown
+    assert "plant_physiology.pdf" in markdown and "p.45" in markdown
 
 
 def test_graph_streams_tokens(settings: Settings, vector_store: VectorStoreManager) -> None:

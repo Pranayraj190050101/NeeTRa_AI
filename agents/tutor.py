@@ -7,15 +7,17 @@ and compiled graph) and hides the lazy initialisation order:
                         ->  FAISS (loads on first search)
                         ->  LangGraph
 
-The UI therefore starts instantly and only pays the model cost when the
-student sends the first question.  Each turn also carries the chosen answer
-mode, which is a presentation choice - it never changes the retrieval pipeline.
+Startup validates one real completion and one textbook search before the UI is
+built, so students never see a false ready state. Each turn also carries the
+chosen answer mode, which is a presentation choice - it never changes the
+retrieval pipeline.
 """
 
 from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from agents.base import emit_event
@@ -23,7 +25,7 @@ from agents.graph import TutorGraph
 from agents.registry import describe_registry, planned_agents
 from agents.state import Citation, TutorResult
 from config import Settings
-from llm.base import LLMClient
+from llm.base import LLMClient, LLMError
 from llm.factory import LLMFactory
 from prompts.loader import PromptLibrary
 from rag.vector_store import VectorStoreManager, read_index_metadata
@@ -56,6 +58,7 @@ class NEETTutor:
         self._llm = llm
         self._graph: TutorGraph | None = None
         self._platform: Any | None = None
+        self._readiness: dict[str, Any] | None = None
         self._lock = threading.RLock()
         self._started_at = time.time()
 
@@ -105,6 +108,117 @@ class NEETTutor:
     def llm(self) -> LLMClient | None:
         return self._llm
 
+    def startup_status(self) -> dict[str, Any]:
+        """Return the last verified readiness snapshot without doing new I/O."""
+        if self._readiness is not None:
+            return self._readiness
+        index_ready = bool(self.index_status()["ready"])
+        checks = {
+            "knowledge_base": {"ready": index_ready, "label": "Knowledge Base"},
+            "llm": {"ready": False, "label": "LLM", "detail": "Not checked yet"},
+            "retrieval": {"ready": False, "label": "Retrieval", "detail": "Not checked yet"},
+        }
+        return {
+            "ready": False,
+            "checks": checks,
+            "student_message": "Genie is still getting ready. Please check again in a moment.",
+            "errors": {},
+            "checked_at": None,
+        }
+
+    def validate_startup(
+        self,
+        *,
+        verify_generation: bool = True,
+        verify_retrieval: bool = True,
+    ) -> dict[str, Any]:
+        """Prove that the study library, answer service and search actually work.
+
+        This is deliberately called before the UI is built.  A configuration-only
+        check is not enough: the Groq SDK can be absent, a key can be rejected, or
+        an index can exist on disk but fail to load.  The returned snapshot powers
+        the student gate; technical details remain available to Developer Mode.
+        """
+        with self._lock:
+            checks: dict[str, dict[str, Any]] = {
+                "knowledge_base": {"ready": False, "label": "Knowledge Base"},
+                "llm": {"ready": False, "label": "LLM"},
+                "retrieval": {"ready": False, "label": "Retrieval"},
+            }
+            errors: dict[str, str] = {}
+
+            index = self.index_status()
+            checks["knowledge_base"]["ready"] = bool(index["ready"])
+            checks["knowledge_base"]["detail"] = (
+                "Your NCERT study library is available."
+                if index["ready"]
+                else "Your NCERT study library is not available yet."
+            )
+            if not index["ready"]:
+                errors["knowledge_base"] = f"No readable index at {self.settings.index_dir}"
+
+            try:
+                self.settings.validate_llm_provider()
+                prompt_problems = self.prompts.validate()
+                if prompt_problems:
+                    raise LLMError("Prompt validation failed: " + "; ".join(prompt_problems))
+                graph = self.ensure_ready()
+                llm = graph.llm
+                if verify_generation:
+                    probe = llm.generate(
+                        [{"role": "user", "content": "Reply with the single word READY."}],
+                        max_new_tokens=32,
+                        temperature=0.0,
+                    )
+                    if not str(probe or "").strip():
+                        raise LLMError("The provider returned an empty readiness response.")
+                checks["llm"].update(ready=True, detail="Genie can generate answers.")
+            except Exception as exc:
+                logger.exception("LLM startup validation failed")
+                errors["llm"] = self._diagnostic_error(exc)
+                checks["llm"]["detail"] = self._student_llm_error(exc)
+
+            if not index["ready"]:
+                checks["retrieval"]["detail"] = "Textbook search needs the study library."
+                errors["retrieval"] = "Skipped because the knowledge base is unavailable"
+            else:
+                try:
+                    if verify_retrieval:
+                        self.vector_store.search("cell", k=1, score_threshold=0.0)
+                    else:
+                        self.vector_store.load()
+                    checks["retrieval"].update(
+                        ready=True, detail="Genie can find relevant textbook explanations."
+                    )
+                except Exception as exc:
+                    logger.exception("Retrieval startup validation failed")
+                    errors["retrieval"] = self._diagnostic_error(exc)
+                    checks["retrieval"]["detail"] = (
+                        "Textbook search is unavailable. Please try reconnecting."
+                    )
+
+            ready = all(bool(item["ready"]) for item in checks.values())
+            if ready:
+                message = "You're all set. Ask Genie your first NEET doubt."
+            elif not checks["llm"]["ready"]:
+                message = (
+                    str(checks["llm"]["detail"])
+                    + " You can still view Dashboard and Progress, or try reconnecting."
+                )
+            else:
+                message = (
+                    "Your textbook study tools are not ready yet. You can still view "
+                    "Dashboard and Progress, or try reconnecting."
+                )
+            self._readiness = {
+                "ready": ready,
+                "checks": checks,
+                "student_message": message,
+                "errors": errors,
+                "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+            return self._readiness
+
     # --------------------------------------------------------------------- ask
     def ask(
         self,
@@ -138,7 +252,7 @@ class NEETTutor:
         except Exception as exc:  # defensive: graph.ask already handles its own errors
             logger.exception("Unexpected tutor failure after %.1fs", time.perf_counter() - started)
             return TutorResult.failure(
-                "Unexpected failure while answering. See `logs/neet_tutor.log` for the traceback.",
+                "Genie could not finish that answer. Please try again or use Try reconnecting.",
                 error=str(exc),
             )
 
@@ -242,6 +356,7 @@ class NEETTutor:
             "hardware": gpu_summary(),
             "agents": describe_registry(),
             "coach": self.coach_status(),
+            "readiness": self.startup_status(),
             "uptime": format_seconds(time.time() - self._started_at),
         }
 
@@ -289,18 +404,27 @@ class NEETTutor:
 
     # --------------------------------------------------------------- internals
     def _startup_hint(self, exc: Exception) -> str:
-        """Turn a model-loading crash into a readable chat message."""
-        return (
-            "**The language model could not be loaded.**\n\n"
-            f"`{type(exc).__name__}: {exc}`\n\n"
-            "Useful checks:\n"
-            "1. `pip install -r requirements.txt` finished without errors.\n"
-            "2. Enough disk space and RAM/VRAM for "
-            f"`{self.settings.llm_model}` (~15 GB in bf16).\n"
-            "3. Try a smaller model, e.g. `NEET_LLM_MODEL=Qwen/Qwen2.5-3B-Instruct`.\n"
-            "4. Or test the UI without a model: `NEET_LLM_BACKEND=mock`.\n"
-            f"5. Details: `{self.settings.log_dir / 'neet_tutor.log'}`."
-        )
+        """Keep provider failures friendly; logs retain the technical detail."""
+        return self._student_llm_error(exc) + " Please try again, or view Dashboard and Progress meanwhile."
+
+    @staticmethod
+    def _student_llm_error(exc: Exception) -> str:
+        detail = str(exc).lower()
+        if "api key" in detail or "authentication" in detail or "401" in detail:
+            return "Genie could not sign in to the answer service. The setup needs attention."
+        if "rate" in detail or "429" in detail:
+            return "Genie is busy right now. Please wait a moment before trying again."
+        if "connection" in detail or "network" in detail or "timeout" in detail:
+            return "Genie cannot reach the answer service. Check your internet connection and retry."
+        return "Genie is not connected yet, so answers are paused rather than showing you an unreliable reply."
+
+    def _diagnostic_error(self, exc: Exception) -> str:
+        """Secret-free exception text for Developer Mode."""
+        detail = str(exc)
+        for secret in (self.settings.groq_api_key, self.settings.hf_token):
+            if secret:
+                detail = detail.replace(secret, "***")
+        return f"{type(exc).__name__}: {detail}"
 
 
 def citations_to_markdown(citations: list[Citation]) -> str:
@@ -312,8 +436,8 @@ def citations_to_markdown(citations: list[Citation]) -> str:
         page = f" · p.{citation['page']}" if citation.get("page") else ""
         preview = str(citation.get("preview", "")).replace("\n", " ").strip()
         lines.append(
-            f"**{citation['index']}.** `{citation['file_name']}`{page} · "
-            f"{citation['subject']} · score {citation['score']:.2f}\n\n"
+            f"**{citation['index']}.** {citation['file_name']}{page} · "
+            f"{str(citation['subject']).title()}\n\n"
             f"> {preview}"
         )
     return "\n\n".join(lines)

@@ -318,6 +318,25 @@ class StubTutor:
             "path": "vectordb",
         }
 
+    def startup_status(self) -> dict[str, Any]:
+        return {
+            "ready": True,
+            "checks": {
+                "knowledge_base": {"ready": True, "label": "Knowledge Base"},
+                "llm": {"ready": True, "label": "LLM"},
+                "retrieval": {"ready": True, "label": "Retrieval"},
+            },
+            "student_message": "You're all set. Ask Genie your first NEET doubt.",
+            "errors": {},
+            "checked_at": "today",
+        }
+
+    def validate_startup(self) -> dict[str, Any]:
+        return self.startup_status()
+
+    def health(self) -> dict[str, Any]:
+        return {"readiness": self.startup_status(), "index": self.index_status()}
+
     def architecture(self) -> str:
         return "router -> retrieval -> generation"
 
@@ -344,77 +363,60 @@ def built(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> FakeGradio:
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
-def test_navigation_leads_with_ask_genie_and_keeps_learn(built: FakeGradio) -> None:
-    """Ask Genie is the primary module; Learn still ships while the flag is on."""
-    assert built.labels()[:6] == [
-        "Ask Genie",
-        "Dashboard",
-        "Practice",
-        "Learn",
-        "Progress",
-        "Revision Hub",
+def test_navigation_is_exactly_the_six_student_modules(built: FakeGradio) -> None:
+    assert built.labels() == [
+        "🏠 Dashboard",
+        "📚 Learn",
+        "🎯 Practice",
+        "🤖 Ask Genie",
+        "📈 Progress",
+        "📝 Revision Hub",
     ]
+    assert built.tabs().props["selected"] == "dashboard"
 
 
-def test_learn_flag_off_hides_the_tab_and_skips_its_widgets(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
-    """``NEETRA_ENABLE_LEARN=false`` drops Learn without touching the rest."""
-    no_learn = settings.model_copy(update={"learn_enabled": False})
-    app_module.build_app(no_learn, tutor=stub)
-    assert fake_gr.labels()[:5] == [
-        "Ask Genie",
-        "Dashboard",
-        "Practice",
-        "Progress",
-        "Revision Hub",
-    ]
-    assert "Learn" not in fake_gr.labels()
-    assert fake_gr.labels()[5:] == ["Knowledge base", "Coach", "Architecture"]
-    assert not [c for c in fake_gr.tabs().find("tab") if c.props.get("id") == "learn"]
-
-
-def test_learn_flag_off_still_builds_the_learn_service(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
-    """Hiding the UI must not disable the underlying service (backward compatible)."""
-    no_learn = settings.model_copy(update={"learn_enabled": False})
-    app_module.build_app(no_learn, tutor=stub)
-    assert stub.platform().learn is not None
-
-
-def test_the_diagnostics_tabs_were_not_removed(built: FakeGradio) -> None:
-    """Knowledge base / Coach / Architecture still ship, after the modules."""
-    assert built.labels()[6:] == ["Knowledge base", "Coach", "Architecture"]
+def test_diagnostics_are_hidden_behind_developer_mode(built: FakeGradio) -> None:
+    toggle = built.by_label("Developer Mode")
+    assert toggle.value is False
+    panel = next(
+        node for node in built.created
+        if isinstance(node, Accordion) and (
+            node.props.get("label") == "Technical diagnostics"
+            or (node.args and node.args[0] == "Technical diagnostics")
+        )
+    )
+    assert panel.props["visible"] is False
+    assert built.event_for("Developer Mode", "change").call(True)["visible"] is True
 
 
 def test_module_tabs_carry_the_ids_the_shortcuts_jump_to(built: FakeGradio) -> None:
     ids = {child.props.get("label"): child.props.get("id") for child in built.tabs().find("tab")}
-    assert ids["Dashboard"] == "dashboard"
-    assert ids["Ask Genie"] == "ask-genie"
-    assert ids["Revision Hub"] == "revision"
-
-
-def test_platform_disabled_serves_the_original_chat_only(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
-    offline = settings.model_copy(update={"platform_enabled": False})
-    app_module.build_app(offline, tutor=stub)
-    assert fake_gr.labels() == ["Ask Genie", "Knowledge base", "Coach", "Architecture"]
-    assert stub.platform_calls == 0, "the kill switch must not build platform services"
+    assert ids["🏠 Dashboard"] == "dashboard"
+    assert ids["🤖 Ask Genie"] == "ask-genie"
+    assert ids["📝 Revision Hub"] == "revision"
 
 
 # ---------------------------------------------------------------------------
 # Ask Genie = the coach interface, reused
 # ---------------------------------------------------------------------------
-def test_ask_genie_keeps_the_coach_controls(built: FakeGradio) -> None:
-    ask_tab = next(child for child in built.tabs().find("tab") if child.props.get("label") == "Ask Genie")
-    assert ask_tab.find("chatbot"), "the chatbot is the reused interface"
+def test_ask_genie_has_simple_student_controls_and_suggestions(built: FakeGradio) -> None:
+    ask_tab = next(child for child in built.tabs().find("tab") if child.props.get("label") == "🤖 Ask Genie")
+    assert ask_tab.find("chatbot")
     modes = ask_tab.find("radio")[0]
     assert [value for _, value in modes.props["choices"]] == [mode.value for mode in AnswerMode]
-    assert ask_tab.find("textbox"), "the question box is intact"
-    assert ask_tab.find("slider"), "the passage slider is intact"
-    assert ask_tab.find("examples"), "the example doubts are intact"
-    assert modes.props["value"] in [mode.value for mode in AnswerMode]
+    assert ask_tab.find("textbox")
+    assert not ask_tab.find("slider"), "technical retrieval controls stay out of the student UI"
+    assert ask_tab.find("examples")
+    text = "\n".join(node.props.get("value") or "" for node in ask_tab.find("markdown"))
+    assert "✅ **Knowledge Base Ready**" in text
+    assert "✅ **LLM Ready**" in text
+    assert "✅ **Retrieval Ready**" in text
+    assert "Student Profile" in text
 
 
-def test_ask_genie_send_handler_matches_the_original_shape(built: FakeGradio) -> None:
-    event = built.event_for("Ask")
-    assert len(event.inputs) == 6, "message, chat, subject, mode, top_k, stream"
+def test_ask_genie_send_handler_uses_only_student_inputs(built: FakeGradio) -> None:
+    event = built.event_for("Send to Genie")
+    assert len(event.inputs) == 4, "message, chat, subject and answer style"
     assert [node.kind for node in event.outputs] == ["chatbot", "markdown", "markdown"]
     assert inspect.isgeneratorfunction(event.fn), "streaming must stay a generator"
 
@@ -451,7 +453,7 @@ def test_tabnav_understands_the_injected_build(built: FakeGradio) -> None:
 # Dashboard shortcuts
 # ---------------------------------------------------------------------------
 def test_dashboard_practice_shortcut_configures_and_jumps(built: FakeGradio, stub: StubTutor) -> None:
-    event = built.event_for("🧩 Practice MCQs")
+    event = built.event_for("✅ Start Practice")
     guidance, scope_update, tabs_update = event.call()
     assert "Practice" in guidance
     assert scope_update["value"] == "chapter"
@@ -459,7 +461,7 @@ def test_dashboard_practice_shortcut_configures_and_jumps(built: FakeGradio, stu
 
 
 def test_dashboard_ask_shortcut_drafts_into_the_chat_box(built: FakeGradio, stub: StubTutor) -> None:
-    event = built.event_for("💬 Ask Doubt")
+    event = built.event_for("✅ Ask a Doubt")
     guidance, mode_update, message_update, tabs_update = event.call()
     assert "Ask Genie" in guidance
     assert mode_update["value"] == AnswerMode.DETAILED.value
@@ -470,15 +472,15 @@ def test_dashboard_ask_shortcut_drafts_into_the_chat_box(built: FakeGradio, stub
 def test_dashboard_refresh_recounts_from_the_store(built: FakeGradio, stub: StubTutor) -> None:
     outputs = built.event_for("Refresh dashboard").outputs
     values = built.event_for("Refresh dashboard").call()
-    assert len(values) == len(outputs) == 4
-    assert "Quick statistics" in values[0]
+    assert len(values) == len(outputs) == 6
+    assert "Mock Test Statistics" in values[0]
 
 
 # ---------------------------------------------------------------------------
 # Learn
 # ---------------------------------------------------------------------------
 def test_learn_tab_offers_the_indexed_chapters(built: FakeGradio) -> None:
-    learn_tab = next(child for child in built.tabs().find("tab") if child.props.get("label") == "Learn")
+    learn_tab = next(child for child in built.tabs().find("tab") if child.props.get("label") == "📚 Learn")
     dropdowns = learn_tab.find("dropdown")
     subjects, chapters = dropdowns[0], dropdowns[1]
     assert [value for _, value in subjects.props["choices"]][:3] == ["physics", "chemistry", "biology"]
@@ -580,12 +582,6 @@ def test_progress_reads_the_store_after_a_test(built: FakeGradio, stub: StubTuto
     assert platform.progress.stats()["tests"] == 1
 
 
-def test_progress_shows_the_raw_json(built: FakeGradio) -> None:
-    raw = built.call("Reload JSON")
-    assert raw.startswith("```json")
-    assert '"tests"' in raw
-
-
 def test_progress_reset_empties_the_store(built: FakeGradio, stub: StubTutor) -> None:
     platform = stub.platform()
     values = built.call("Generate test", "chapter", "physics", "Mechanics", 2)
@@ -600,7 +596,7 @@ def test_progress_reset_empties_the_store(built: FakeGradio, stub: StubTutor) ->
 # Revision Hub
 # ---------------------------------------------------------------------------
 def test_revision_deliverables_are_all_offered(built: FakeGradio) -> None:
-    revision_tab = next(child for child in built.tabs().find("tab") if child.props.get("label") == "Revision Hub")
+    revision_tab = next(child for child in built.tabs().find("tab") if child.props.get("label") == "📝 Revision Hub")
     sheet_types = [value for _, value in revision_tab.find("radio")[0].props["choices"]]
     assert {"flash_notes", "formula_sheet", "high_yield", "last_minute"} <= set(sheet_types)
 
@@ -633,21 +629,26 @@ def test_revision_can_draft_a_doubt_for_the_coach(built: FakeGradio, stub: StubT
 # ---------------------------------------------------------------------------
 # Cross-cutting
 # ---------------------------------------------------------------------------
-def test_architecture_tab_documents_the_modules_and_hooks(built: FakeGradio) -> None:
-    blocks = next(node for node in built.created if isinstance(node, Blocks))
-    texts = [node.props.get("value") or "" for node in blocks.find("markdown")]
-    joined = "\n".join(texts)
-    assert "learning/service.py" in joined or "GeniePlatform" in joined
-    assert "VoiceTranscriber.transcribe -> GeniePlatform.ask" in joined
-    assert "ImageSolver.extract_question -> GeniePlatform.ask" in joined
+def test_developer_mode_contains_the_technical_diagnostics(built: FakeGradio) -> None:
+    panel = next(
+        node for node in built.created
+        if isinstance(node, Accordion) and (
+            node.props.get("label") == "Technical diagnostics"
+            or (node.args and node.args[0] == "Technical diagnostics")
+        )
+    )
+    joined = "\n".join(node.props.get("value") or "" for node in panel.find("markdown"))
+    assert "GeniePlatform" in joined
+    assert "Agent graph" in joined
+    assert "Embeddings" in joined
 
 
-def test_starting_the_app_never_loads_a_model(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
-    """Lazy start-up is existing behaviour; building the UI must stay cheap."""
-    fake = fake_gr
-    app_module.build_app(settings.model_copy(update={"platform_enabled": True}), tutor=stub)
-    blocks = next(node for node in fake.created if isinstance(node, Blocks))
-    assert blocks.props["title"] == settings.app_name
+def test_app_uses_verified_readiness_without_loading_a_model_during_layout(
+    fake_gr: FakeGradio, settings: Any, stub: StubTutor
+) -> None:
+    app_module.build_app(settings, tutor=stub)
+    blocks = next(node for node in fake_gr.created if isinstance(node, Blocks))
+    assert blocks.props["title"] == "🧞 NEET Genie"
     assert stub.platform_calls >= 1
 
 
@@ -657,7 +658,9 @@ def test_the_layout_is_rebuilt_on_a_second_call(fake_gr: FakeGradio, settings: A
     first = len(fake_gr.created)
     app_module.build_app(settings, tutor=stub)
     assert len(fake_gr.created) > first
-    assert fake_gr.labels()[:6] == ["Ask Genie", "Dashboard", "Practice", "Learn", "Progress", "Revision Hub"]
+    assert fake_gr.labels() == [
+        "🏠 Dashboard", "📚 Learn", "🎯 Practice", "🤖 Ask Genie", "📈 Progress", "📝 Revision Hub"
+    ]
 
 
 def test_clock_helper_is_used_for_duration(built: FakeGradio, stub: StubTutor) -> None:
