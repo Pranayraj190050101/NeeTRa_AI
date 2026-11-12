@@ -36,8 +36,8 @@ sentencepiece>=0.2.0
 
 # --- Hosted LLM provider (LLM_PROVIDER=groq) -------------------------------
 # Official Groq SDK, used by llm/groq_client.py. Imported lazily, so the offline
-test suite and ``app.py --check`` run without it; required only at runtime when
-groq is the active provider.
+# test suite and ``app.py --check`` run without it; required only at runtime when
+# groq is the active provider.
 groq>=0.11.0,<1.0
 
 # --- Document ingestion ----------------------------------------------------
