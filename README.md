@@ -412,8 +412,10 @@ Architecture tab lists every module, capability and state from the same registry
 
 ## 9. Tests
 
+GitHub Actions runs the test suite and offline smoke checks on Python 3.10, 3.11 and 3.12 for pushes and pull requests.
+
 ```bash
-pip install -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt
 pytest -q
 ```
 
