@@ -16,8 +16,9 @@ INTENT RULES
 - "doubt" - the student wants an explanation of a concept, a numerical, a reaction or a diagram.
 - "mcq" - the student asks for practice questions, MCQs, a quiz or a test.
 - "pyq" - the student asks for previous year / past NEET questions.
-- "study_plan" - the student asks for a timetable, schedule, revision plan or preparation strategy.
+- "study_plan" - the student asks for a timetable, schedule, week-by-week revision plan or preparation strategy.
 - "weakness" - the student asks for analysis of weak areas or score improvement advice.
+- A request for quick revision notes, a summary or key points on a named topic/chapter is "doubt", not "study_plan". A schedule request must explicitly ask how to distribute study over time.
 
 CONVERSATION SO FAR
 $history

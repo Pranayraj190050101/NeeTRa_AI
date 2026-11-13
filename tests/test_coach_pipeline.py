@@ -152,28 +152,19 @@ def test_ui_labels_are_accepted_by_the_graph(
     assert "\U0001f9e9 Practice MCQs" in result.answer
 
 
-def test_an_explicit_mode_serves_an_mcq_request_without_deferring(
+def test_mcq_and_study_plan_requests_use_specialist_agents(
     settings: Settings, prompts: PromptLibrary, vector_store: VectorStoreManager
 ) -> None:
     graph = _graph(settings, prompts, vector_store)
 
     served = graph.ask("Generate 5 MCQs on Newton's laws.", mode=AnswerMode.MCQ_PRACTICE)
-    deferred = graph.ask("Generate 5 MCQs on Newton's laws.", mode=AnswerMode.DETAILED)
     planned = graph.ask("Make a 3 month study plan for NEET.", mode=AnswerMode.MCQ_PRACTICE)
 
-    # MCQ Practice keeps the turn inside the real pipeline (retrieval + answer).
-    assert NODE_ANSWER in served.timings and NODE_RETRIEVAL in served.timings
+    assert "mcq_generator" in served.timings
     assert "coming soon" not in served.answer.lower()
     assert served.mode == "mcq_practice"
-
-    # Without a matching mode the polite deferral still happens, as before.
-    assert "coming soon" in deferred.answer.lower() and deferred.citations == []
-    assert NODE_ANSWER not in deferred.timings
-    assert "MCQ Practice" in deferred.answer, "the deferred node should name the mode that can help"
-
-    # No mode can serve a study plan yet.
-    assert "coming soon" in planned.answer.lower()
-    assert NODE_ANSWER not in planned.timings
+    assert "study_planner" in planned.timings
+    assert "coming soon" not in planned.answer.lower()
 
 
 def test_format_repair_is_reported_as_a_notice(

@@ -1,15 +1,7 @@
-"""Intent registry - the extension point for future agents.
+"""Intent registry for active and future agent handlers.
 
 The router classifies every message into an :class:`~utils.constants.Intent`.
-Each intent maps to one agent pipeline.  Adding the MCQ, PYQ, planner or
-weakness agent later is a three-step change:
-
-1. Write ``agents/mcq_agent.py`` with a class deriving from ``BaseAgent``.
-2. Instantiate it in ``agents/graph.py`` and add a node + edge.
-3. Flip its status in ``AGENT_REGISTRY`` below to ``active``.
-
-Until then the graph routes those intents to a polite "not yet available" node
-instead of failing, so the router can already be tuned for them.
+Each intent maps to one agent pipeline.  Each active intent is wired to a specialist node in ``agents/graph.py``.
 """
 
 from __future__ import annotations
@@ -48,26 +40,26 @@ AGENT_REGISTRY: dict[Intent, AgentSpec] = {
     Intent.MCQ: AgentSpec(
         intent=Intent.MCQ,
         title="MCQ Generator Agent",
-        description="Will generate NEET-style MCQs with answer keys and explanations.",
-        status="planned",
+        description="Generates NEET-style MCQs with answer keys and explanations.",
+        status="active",
     ),
     Intent.PYQ: AgentSpec(
         intent=Intent.PYQ,
         title="PYQ Retrieval Agent",
-        description="Will search a previous-year-question index filtered by chapter and year.",
-        status="planned",
+        description="Searches identified previous-year-question sources by chapter and year.",
+        status="active",
     ),
     Intent.STUDY_PLAN: AgentSpec(
         intent=Intent.STUDY_PLAN,
         title="Study Planner Agent",
-        description="Will build a week-by-week NEET revision plan from the syllabus and weak areas.",
-        status="planned",
+        description="Builds a week-by-week revision plan from the indexed syllabus and weak areas.",
+        status="active",
     ),
     Intent.WEAKNESS: AgentSpec(
         intent=Intent.WEAKNESS,
         title="Weakness Analysis Agent",
-        description="Will track quiz history and surface the weakest chapters per subject.",
-        status="planned",
+        description="Uses quiz history to surface the weakest chapters per subject and topics.",
+        status="active",
     ),
 }
 

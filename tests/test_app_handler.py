@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app import build_responder
 from agents.tutor import NEETTutor
+from app import build_responder
 from config import Settings
 from llm.mock_client import MockLLM
 from rag.vector_store import VectorStoreManager
@@ -70,8 +70,10 @@ def test_responder_honours_the_selected_mode(
         "content"
     ]
 
-    assert "\U0001f9e9 Practice MCQs" in answer, "the MCQ mode must shape the reply"
-    assert "\U0001f4d8 Concept Explanation" not in answer, "explanation sections belong to other modes"
+    assert "### MCQ Practice: kinematics" in answer
+    assert "### Answer Key" in answer
+    assert "Explanation:" in answer
+    assert "\\n" not in answer, "generated answers must retain renderable line breaks"
 
 
 def test_cell_cycle_quick_revision_answers_without_an_index(

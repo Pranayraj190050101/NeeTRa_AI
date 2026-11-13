@@ -153,13 +153,13 @@ def coach_panel(settings: Settings) -> str:
         "| Mode | Key | What it is for | Sections produced |\n"
         "| --- | --- | --- | --- |\n"
         f"{rows}\n\n"
-        "_Modes only change presentation. Retrieval, the FAISS index and the agent "
-        "graph are identical for all four, so switching modes never costs a re-index._"
+        "_For concept doubts, modes only change presentation. Specialist requests use their "
+        "dedicated agent, and switching modes never requires a re-index._"
     )
 
 
 def architecture_panel(tutor: NEETTutor) -> str:
-    """Markdown overview of the agent graph and the planned agents."""
+    """Markdown overview of the agent graph and registered agents."""
     registry = describe_registry()
     rows = "\n".join(
         f"| {entry['title']} | `{entry['intent']}` | {entry['status']} | {entry['description']} |"
@@ -174,13 +174,9 @@ def architecture_panel(tutor: NEETTutor) -> str:
         "| Agent | Intent | Status | Responsibility |\n"
         "| --- | --- | --- | --- |\n"
         f"{rows}\n\n"
-        "### Adding a new agent\n\n"
-        "1. Create `agents/mcq_agent.py` with a class deriving from `agents.base.BaseAgent`.\n"
-        "2. Instantiate it in `agents/graph.py` and add the node plus a conditional edge.\n"
-        "3. Flip its status to `active` in `agents/registry.py`.\n\n"
-        "The router already emits `mcq`, `pyq`, `study_plan` and `weakness` intents, and the "
-        "shared state (`agents/state.py`) already carries retrieved passages, so new agents can "
-        "reuse the retrieval layer without changes."
+        "### Adding an intent agent\n\n"
+        "Implement a `BaseAgent`, inject shared services, add its node and routing in "
+        "`agents/graph.py`, then register it in `agents/registry.py`."
     )
 
 

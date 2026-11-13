@@ -11,14 +11,21 @@ block the pipeline: a wrong subject only widens the retrieval filter.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from agents.base import AgentError, BaseAgent, add_notice, emit_event
 from agents.state import RouteDecision
 from llm.base import ChatMessage, LLMError
 from prompts.loader import ROUTER_PROMPT
-from utils.constants import Intent, Subject, intent_from_text, subject_from_text
-from utils.text_utils import clean_text, clamp, extract_json_object, format_history
+from utils.constants import (
+    Intent,
+    Subject,
+    intent_from_text,
+    normalise_token,
+    subject_from_text,
+)
+from utils.text_utils import clamp, clean_text, extract_json_object, format_history
 
 __all__ = ["RouterAgent"]
 
@@ -62,6 +69,15 @@ class RouterAgent(BaseAgent):
                     notices,
                     "Subject classification fell back to keyword rules after a model error.",
                 )
+
+        if intent_from_text(question) is Intent.DOUBT and any(
+            phrase in normalise_token(question)
+            for phrase in ("quick revision notes", "revision notes", "revision sheet")
+        ):
+            decision["intent"] = Intent.DOUBT.value
+            decision["reason"] = (
+                "Topic-specific revision notes are an answer request, not a study schedule."
+            )
 
         # An explicit UI choice always wins over the model.
         override = Subject.coerce(hint) if hint not in {"", "auto"} else None

@@ -91,7 +91,13 @@ class NEETTutor:
                 "graph",
                 "Wiring the router, retrieval and answer agents",
             )
-            self._graph = TutorGraph(self.settings, self._llm, self.vector_store, self.prompts)
+            self._graph = TutorGraph(
+                self.settings,
+                self._llm,
+                self.vector_store,
+                self.prompts,
+                platform=self.platform(),
+            )
             logger.info(
                 "Tutor ready (llm=%s, index_ready=%s)",
                 self._llm.name,
@@ -391,6 +397,7 @@ class NEETTutor:
         return (
             "User Question\n"
             "   -> Subject Router Agent        (subject + intent, JSON)\n"
+            "   -> Intent specialist           (MCQ / PYQ / study plan / weakness)\n"
             "   -> RAG Retrieval Agent         (FAISS top-k, subject filter, mode-scaled)\n"
             "   -> Answer Generation Agent     (Neet Genie persona + mode contract)\n"
             "   -> Coach format repair         (section headings for the mode)\n"
