@@ -394,10 +394,25 @@ def test_ask_genie_can_run_without_textbook_retrieval_when_fallback_is_enabled(
             "retrieval": {"ready": False},
         }
     }
-    assert app_module._ask_genie_available(status, settings)
+    real_provider_settings = settings.model_copy(update={"llm_provider": "huggingface"})
+    assert app_module._ask_genie_available(status, real_provider_settings)
     assert not app_module._ask_genie_available(
-        status, settings.model_copy(update={"allow_general_fallback": False})
+        status, real_provider_settings.model_copy(update={"allow_general_fallback": False})
     )
+    assert not app_module._ask_genie_available(status, settings)
+
+
+def test_mock_provider_disables_student_answers_with_a_clear_message(settings: Any) -> None:
+    status = {
+        "checks": {
+            "llm": {"ready": True},
+            "retrieval": {"ready": True},
+        },
+        "student_message": "You're all set.",
+    }
+
+    assert not app_module._ask_genie_available(status, settings)
+    assert "answers are unavailable" in app_module._ask_genie_status_message(status, settings)
 
 
 def test_module_tabs_carry_the_ids_the_shortcuts_jump_to(built: FakeGradio) -> None:

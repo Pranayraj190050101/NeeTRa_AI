@@ -229,11 +229,23 @@ def _mode_help(mode: AnswerMode) -> str:
 
 
 def _ask_genie_available(status: dict[str, Any], settings: Settings) -> bool:
-    """Allow general-knowledge answers when retrieval is not configured."""
+    """Allow student answers only when a real model provider is ready."""
     checks = status.get("checks") or {}
     llm_ready = bool((checks.get("llm") or {}).get("ready"))
     retrieval_ready = bool((checks.get("retrieval") or {}).get("ready"))
-    return llm_ready and (retrieval_ready or settings.allow_general_fallback)
+    return (
+        settings.resolved_llm_provider != "mock"
+        and llm_ready
+        and (retrieval_ready or settings.allow_general_fallback)
+    )
+
+
+def _ask_genie_status_message(status: dict[str, Any], settings: Settings) -> str:
+    if settings.resolved_llm_provider == "mock":
+        return "Genie's AI service isn't connected yet, so answers are unavailable."
+    if _ask_genie_available(status, settings):
+        return "Ready for your doubt."
+    return str(status.get("student_message") or "Answers are paused until Genie reconnects.")
 
 
 def _student_progress(payload: dict[str, Any]) -> str:
@@ -447,7 +459,7 @@ def build_ask_genie_tab(
                 )
                 clear_btn = gr.ClearButton([chatbot], value="New chat", scale=1)
             status_box = gr.Markdown(
-                _status_line("Ready for your doubt." if ready else "Answers are paused until Genie reconnects."),
+                    _status_line(_ask_genie_status_message(readiness, settings)),
                 elem_id="neet-status",
             )
             gr.Markdown("**Try asking**", elem_classes=["genie-suggestion-label"])
@@ -567,11 +579,7 @@ def build_ask_genie_tab(
         status = tutor.validate_startup()
         available = _ask_genie_available(status, settings)
         return [
-            _status_line(
-                "Ready for your doubt."
-                if available
-                else (status["student_message"] or "Genie could not reconnect.")
-            ),
+            _status_line(_ask_genie_status_message(status, settings)),
             gr.update(interactive=available),
             gr.update(interactive=available),
         ]
@@ -817,8 +825,12 @@ def main(argv: list[str] | None = None) -> int:
 
     tutor = NEETTutor(settings)
     readiness = tutor.validate_startup()
-    if readiness["ready"]:
+    if readiness["ready"] and settings.resolved_llm_provider != "mock":
         logger.info("Startup verified: knowledge base, LLM and retrieval are ready")
+    elif settings.resolved_llm_provider == "mock":
+        logger.warning(
+            "The offline mock provider is active; Ask Genie is disabled until a real model is configured"
+        )
     else:
         # The learning shell can still show progress, but Ask Genie remains gated.
         logger.error("Startup readiness failed: %s", readiness["errors"])
