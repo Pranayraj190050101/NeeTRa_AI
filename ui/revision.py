@@ -13,8 +13,8 @@ from typing import Any, Mapping
 from learning.catalog import ChapterCatalog
 from learning.service import GeniePlatform
 from ui.components import (
-    citations_md,
     esc,
+    hide_source_markers,
     refresh,
     subject_choices,
     table,
@@ -53,9 +53,6 @@ def revision_intro_md() -> str:
             "### \U0001f501 Revision Hub - dense sheets from your own books",
             "",
             table(("Sheet", "Use it when", "Sections"), rows),
-            "",
-            "Every sheet includes textbook references where available, so you can return "
-            "to the exact book and page for deeper study.",
         ]
     )
 
@@ -76,7 +73,7 @@ def sheet_md(doc: Any, *, label: str = "") -> str:
         return esc(doc.markdown) or "**Generation failed.**"
     head = f"_{label}_\n\n" if label else ""
     notes = "\n\n".join(f"- {esc(notice)}" for notice in doc.notices if esc(notice))
-    body = f"## {esc(doc.title)}\n\n{doc.markdown}"
+    body = f"## {esc(doc.title)}\n\n{hide_source_markers(doc.markdown)}"
     return head + body + (f"\n\n**Notes**\n\n{notes}" if notes else "")
 
 
@@ -135,8 +132,6 @@ def build(
     status_box = gr.Markdown("_Pick a sheet type and a target, then Generate._")
 
     sheet_box = gr.Markdown()
-    with gr.Accordion("📖 Textbook references", open=False):
-        citations_box = gr.Markdown("_Appears after the first sheet._")
 
     with gr.Accordion("Your recorded weak areas", open=False):
         weak_box = gr.Markdown(weak_preview_md(platform))
@@ -151,7 +146,6 @@ def build(
         "weak": weak_btn,
         "status": status_box,
         "sheet": sheet_box,
-        "citations": citations_box,
         "weak_preview": weak_box,
         "ask": ask_btn,
         "ask_md": ask_md,
@@ -181,9 +175,8 @@ def wire(
         label = f"{subject.title()} · {esc(target) or 'whole subject'}"
         return [
             f"**Status:** {'done' if doc.ok else 'not generated'} - "
-            f"{len(doc.citations)} passage(s), {len(doc.notices)} note(s). Sheets are counted in Progress.",
+            f"{len(doc.notices)} note(s). Sheets are counted in Progress.",
             sheet_md(doc, label=label),
-            citations_md(doc.citations),
             weak_preview_md(platform),
         ]
 
@@ -192,7 +185,6 @@ def wire(
         return [
             f"**Status:** {'weak-area sheet built' if doc.ok else 'no weak areas recorded yet'}.",
             sheet_md(doc, label="from your test history"),
-            citations_md(doc.citations),
             weak_preview_md(platform),
         ]
 
@@ -207,7 +199,7 @@ def wire(
         return values + (nav.tail("ask-genie") if nav is not None else [])
 
     refs["subject"].change(pick_targets, inputs=[refs["subject"]], outputs=[refs["target"]], queue=False)
-    sheet_outputs = [refs["status"], refs["sheet"], refs["citations"], refs["weak_preview"]]
+    sheet_outputs = [refs["status"], refs["sheet"], refs["weak_preview"]]
     refs["generate"].click(
         make_sheet,
         inputs=[refs["deliverable"], refs["subject"], refs["target"]],

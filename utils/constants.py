@@ -97,9 +97,9 @@ class AnswerMode(str, Enum):
     """How the coach presents its answer - chosen by the student per question.
 
     Modes are a *presentation* concern and live next to :class:`Intent`, which
-    is a *request* concern detected by the router.  A mode can satisfy an
-    intent (``MCQ_PRACTICE`` satisfies ``Intent.MCQ``), which lets the graph
-    serve an explicit mode request before the matching dedicated agent exists.
+    is a *request* concern detected by the router. A mode can satisfy a
+    compatible intent (``MCQ_PRACTICE`` satisfies ``Intent.MCQ``); specialist
+    intents are routed to their dedicated agents.
     """
 
     DETAILED = "detailed"
@@ -159,8 +159,8 @@ class AnswerMode(str, Enum):
     def token_factor(self) -> float:
         """Multiplier on ``llm_max_new_tokens`` - revision sheets are short."""
         return {
-            self.DETAILED: 1.0,
-            self.QUICK_REVISION: 0.6,
+            self.DETAILED: 0.8,
+            self.QUICK_REVISION: 0.8,
             self.MCQ_PRACTICE: 1.5,
             self.PYQ_FOCUS: 1.1,
         }[self]
@@ -556,6 +556,8 @@ SUBJECT_KEYWORDS: dict[Subject, tuple[str, ...]] = {
         "enzyme",
         "biomolecule",
         "genetics",
+        "inheritance",
+        "molecular basis of inheritance",
         "dna",
         "rna",
         "gene",
@@ -615,6 +617,10 @@ INTENT_KEYWORDS: dict[Intent, tuple[str, ...]] = {
     ),
     Intent.STUDY_PLAN: (
         "study plan",
+        "revision plan",
+        "weekly plan",
+        "week by week plan",
+        "week by week",
         "planner",
         "timetable",
         "schedule",
@@ -675,6 +681,23 @@ def intent_from_text(text: str | None) -> Intent | None:
     if not text:
         return None
     normalised = normalise_token(text)
+    planning_request = any(
+        _has_phrase(normalised, phrase)
+        for phrase in (
+            "study plan",
+            "revision plan",
+            "weekly plan",
+            "week by week",
+            "timetable",
+            "schedule",
+            "planner",
+        )
+    )
+    if not planning_request and any(
+        _has_phrase(normalised, phrase)
+        for phrase in ("quick revision notes", "revision notes", "revision sheet")
+    ):
+        return Intent.DOUBT
     for intent, keywords in INTENT_KEYWORDS.items():
         if any(_has_phrase(normalised, keyword) for keyword in keywords):
             return intent

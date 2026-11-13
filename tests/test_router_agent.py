@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import pytest
 
@@ -82,3 +83,14 @@ def test_router_handles_general_questions(
     update = _run(agent, "Hello, how should I start my revision today?")
     assert update["subject"] in {"general", "biology", "chemistry", "physics"}
     assert update["intent"] in {"doubt", "study_plan"}
+
+
+def test_router_distinguishes_weekly_plans_from_topic_revision(
+    settings: Settings, prompt_library: PromptLibrary
+) -> None:
+    agent = RouterAgent(settings, llm=MockLLM(settings), prompts=prompt_library)
+    plan = _run(agent, "Build a week-by-week NEET revision plan from the syllabus.")
+    notes = _run(agent, "Give me quick revision notes for Molecular Basis of Inheritance.")
+    assert plan["intent"] == "study_plan"
+    assert notes["intent"] == "doubt"
+    assert notes["subject"] == "biology"

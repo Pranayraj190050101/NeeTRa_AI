@@ -8,7 +8,7 @@ keeps one JSON document per student profile on disk
 * :meth:`ProgressStore.record` appends one graded test,
 * :meth:`ProgressStore.stats` aggregates it for the Dashboard and Progress tab,
 * :meth:`ProgressStore.weak_areas` ranks topics and chapters for the Revision
-  Hub and the future Weakness agent.
+  Hub and Weakness Analysis agent.
 
 Writes are atomic (temp file + ``os.replace``) and guarded by a lock, so a
 Gradio reload or two concurrent tabs cannot corrupt the history.  Swapping the

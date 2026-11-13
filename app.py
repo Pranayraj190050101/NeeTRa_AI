@@ -30,7 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:  # pragma: no cover - import plumbing
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from agents.state import TutorResult  # noqa: E402
-from agents.tutor import NEETTutor, citations_to_markdown  # noqa: E402
+from agents.tutor import NEETTutor  # noqa: E402
 from agents.registry import describe_registry  # noqa: E402
 from config import BASE_DIR, ProviderConfigError, Settings, get_settings  # noqa: E402
 from learning.capabilities import describe_capabilities  # noqa: E402
@@ -153,13 +153,13 @@ def coach_panel(settings: Settings) -> str:
         "| Mode | Key | What it is for | Sections produced |\n"
         "| --- | --- | --- | --- |\n"
         f"{rows}\n\n"
-        "_Modes only change presentation. Retrieval, the FAISS index and the agent "
-        "graph are identical for all four, so switching modes never costs a re-index._"
+        "_For concept doubts, modes only change presentation. Specialist requests use their "
+        "dedicated agent, and switching modes never requires a re-index._"
     )
 
 
 def architecture_panel(tutor: NEETTutor) -> str:
-    """Markdown overview of the agent graph and the planned agents."""
+    """Markdown overview of the agent graph and registered agents."""
     registry = describe_registry()
     rows = "\n".join(
         f"| {entry['title']} | `{entry['intent']}` | {entry['status']} | {entry['description']} |"
@@ -174,13 +174,9 @@ def architecture_panel(tutor: NEETTutor) -> str:
         "| Agent | Intent | Status | Responsibility |\n"
         "| --- | --- | --- | --- |\n"
         f"{rows}\n\n"
-        "### Adding a new agent\n\n"
-        "1. Create `agents/mcq_agent.py` with a class deriving from `agents.base.BaseAgent`.\n"
-        "2. Instantiate it in `agents/graph.py` and add the node plus a conditional edge.\n"
-        "3. Flip its status to `active` in `agents/registry.py`.\n\n"
-        "The router already emits `mcq`, `pyq`, `study_plan` and `weakness` intents, and the "
-        "shared state (`agents/state.py`) already carries retrieved passages, so new agents can "
-        "reuse the retrieval layer without changes."
+        "### Adding an intent agent\n\n"
+        "Implement a `BaseAgent`, inject shared services, add its node and routing in "
+        "`agents/graph.py`, then register it in `agents/registry.py`."
     )
 
 
@@ -212,7 +208,7 @@ def platform_panel(platform: Any) -> str:
         "read locally and shown for review before the student sends it. Voice input "
         "is still planned.\n\n"
         f"{describe_capabilities(platform.capabilities)}\n\n"
-        "_Uploaded questions use the same answer and citation pipeline as typed questions._"
+        "_Uploaded questions use the same answer pipeline as typed questions._"
     )
 
 
@@ -273,14 +269,12 @@ def _completion_status(result: TutorResult, settings: Settings) -> str:
     if result.error:
         return "**Status:** Genie could not finish this answer. Please try again."
     parts = [f"**Subject:** {str(result.subject).title()}"]
-    if result.citations:
-        parts.append(f"{len(result.citations)} textbook reference(s)")
     parts.append(f"Answered in {format_seconds(result.total_seconds)}")
     return " · ".join(parts)
 
 
 # ---------------------------------------------------------------------------
-# Chat handler (generator -> streams status, tokens and sources)
+# Chat handler (generator -> streams status and tokens)
 # ---------------------------------------------------------------------------
 def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None):
     """Create the Gradio callback bound to a tutor instance.
@@ -298,12 +292,12 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
         mode: str,
         top_k: float | None = None,
         stream_enabled: bool | None = None,
-    ) -> Iterator[tuple[list[dict[str, Any]], str, str]]:
+    ) -> Iterator[tuple[list[dict[str, Any]], str]]:
         history = list(chat or [])
         text = (message or "").strip()
 
         if not text:
-            yield history, _status_line("Please type a question."), ""
+            yield history, _status_line("Please type a question.")
             return
         if len(text) > settings.max_question_chars:
             text = text[: settings.max_question_chars]
@@ -320,7 +314,10 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
         history.append({"role": "user", "content": text})
 
         def snapshot(answer: str) -> list[dict[str, Any]]:
-            return [*history, {"role": "assistant", "content": answer}]
+            return [
+                *history,
+                {"role": "assistant", "content": genie_ui.hide_source_markers(answer)},
+            ]
 
         streaming = bool(settings.stream_tokens if stream_enabled is None else stream_enabled)
         streaming = streaming and settings.stream_tokens
@@ -362,7 +359,7 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
         partial = ""
         status = _status_line("Genie is thinking about your doubt…")
         last_emit = 0.0
-        yield snapshot(partial), status, ""
+        yield snapshot(partial), status
 
         while True:
             kind, payload = events.get()
@@ -373,10 +370,10 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
                 now = time.monotonic()
                 if now - last_emit >= STREAM_THROTTLE_S:
                     last_emit = now
-                    yield snapshot(partial), status, ""
+                    yield snapshot(partial), status
             elif kind == "event" and isinstance(payload, dict):
                 status = _status_line(_student_progress(payload))
-                yield snapshot(partial), status, ""
+                yield snapshot(partial), status
 
         thread.join(timeout=5.0)
         result = box.get("result")
@@ -387,16 +384,15 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
                 "**Genie could not finish that answer.** Please try again in a moment. "
                 "You can also try a shorter question or use Try reconnecting."
             )
-            yield snapshot(message), _status_line("Failed"), ""
+            yield snapshot(message), _status_line("Failed")
             return
 
-        sources = citations_to_markdown(result.citations)
         logger.info(
             "Ask Genie request completed (ok=%s, citations=%d)",
             getattr(result, "ok", True),
             len(result.citations),
         )
-        yield snapshot(result.answer), _completion_status(result, settings), sources
+        yield snapshot(result.answer), _completion_status(result, settings)
 
     return respond
 
@@ -418,7 +414,7 @@ def build_ask_genie_tab(
     gr.Markdown(
         "## 🤖 Ask Genie\n"
         "Ask a concept, numerical, MCQ or revision question. Genie explains it in a "
-        "NEET-focused way and shows the textbook references used."
+        "NEET-focused way."
     )
     with gr.Row():
         with gr.Column(scale=3, elem_classes=["genie-chat-card"]):
@@ -487,12 +483,6 @@ def build_ask_genie_tab(
                         outputs=[message_box],
                         queue=False,
                     )
-            with gr.Accordion("📖 Textbook references", open=False):
-                sources_box = gr.Markdown(
-                    "_References appear here after Genie answers._",
-                    elem_classes=["source-card"],
-                )
-
         with gr.Column(scale=1, elem_classes=["genie-side-card"]):
             gr.Markdown(dashboard_ui.student_profile_md(platform.progress))
             subject_box = gr.Dropdown(
@@ -526,7 +516,7 @@ def build_ask_genie_tab(
     send_btn.click(
         responder,
         inputs=[message_box, chatbot, subject_box, mode_box],
-        outputs=[chatbot, status_box, sources_box],
+        outputs=[chatbot, status_box],
     ).then(lambda: "", outputs=[message_box], queue=False)
 
     def read_photo(image_path: str | None, subject: str) -> tuple[str, str]:
@@ -566,12 +556,12 @@ def build_ask_genie_tab(
     message_box.submit(
         responder,
         inputs=[message_box, chatbot, subject_box, mode_box],
-        outputs=[chatbot, status_box, sources_box],
+        outputs=[chatbot, status_box],
     ).then(lambda: "", outputs=[message_box], queue=False)
 
     clear_btn.click(
-        lambda: (_status_line("New chat started. What would you like to understand?"), ""),
-        outputs=[status_box, sources_box],
+        lambda: _status_line("New chat started. What would you like to understand?"),
+        outputs=[status_box],
         queue=False,
     )
 
@@ -596,7 +586,6 @@ def build_ask_genie_tab(
         "send": send_btn,
         "clear": clear_btn,
         "status": status_box,
-        "sources": sources_box,
         "subject": subject_box,
         "mode": mode_box,
         "mode_help": mode_md,

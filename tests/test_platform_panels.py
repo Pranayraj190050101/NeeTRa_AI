@@ -445,6 +445,12 @@ def test_ask_genie_has_simple_student_controls_and_suggestions(built: FakeGradio
     assert "Knowledge Base Ready" not in text
     assert "LLM Ready" not in text
     assert "Retrieval Ready" not in text
+    assert "Textbook references" not in text
+    assert "citation pipeline" not in text
+    assert not any(
+        node.kind == "accordion" and node.args[0] == "📖 Textbook references"
+        for node in built.created
+    )
     assert "You're all set." not in text
     assert "Student Profile" in text
 
@@ -452,8 +458,15 @@ def test_ask_genie_has_simple_student_controls_and_suggestions(built: FakeGradio
 def test_ask_genie_send_handler_uses_only_student_inputs(built: FakeGradio) -> None:
     event = built.event_for("Send to Genie")
     assert len(event.inputs) == 4, "message, chat, subject and answer style"
-    assert [node.kind for node in event.outputs] == ["chatbot", "markdown", "markdown"]
+    assert [node.kind for node in event.outputs] == ["chatbot", "markdown"]
     assert inspect.isgeneratorfunction(event.fn), "streaming must stay a generator"
+
+
+def test_source_markers_are_hidden_but_numeric_ranges_are_preserved() -> None:
+    rendered = genie_ui.hide_source_markers("Supported claim [1]. Interval [1, 2].")
+
+    assert "[1]" not in rendered
+    assert "[1, 2]" in rendered
 
 
 def test_ask_genie_photo_upload_prefills_editable_question_without_sending(
@@ -561,17 +574,18 @@ def test_learn_tab_offers_the_indexed_chapters(fake_gr: FakeGradio, settings: An
 def test_learn_generate_builds_the_four_section_page(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
     settings = settings.model_copy(update={"learn_enabled": True})
     app_module.build_app(settings, tutor=stub)
-    page, status, citations = fake_gr.call("Generate study page", "physics", "Mechanics", "")
+    page, status = fake_gr.call("Generate study page", "physics", "Mechanics", "")
     for heading in ("Summary", "High-Yield Concepts", "Important NEET Points", "Quick Revision Notes"):
         assert heading in page, f"missing section {heading}"
     assert "Status" in status
-    assert citations
+    assert "[1]" not in page
+    assert "reference" not in status.lower()
 
 
 def test_learn_topic_box_works_without_a_chapter(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
     settings = settings.model_copy(update={"learn_enabled": True})
     app_module.build_app(settings, tutor=stub)
-    page, _status, _citations = fake_gr.call("Generate study page", "physics", "", "photoelectric effect")
+    page, _status = fake_gr.call("Generate study page", "physics", "", "photoelectric effect")
     assert "Mock study material" in page or "High-Yield" in page
 
 
@@ -606,7 +620,7 @@ def _picks_for(test: Any, answer: int = 1) -> list[int | None]:
 
 def test_practice_generate_reveals_one_radio_per_question(built: FakeGradio, stub: StubTutor) -> None:
     values = built.call("Generate test", "chapter", "physics", "Mechanics", 3)
-    status, quiz, radios, citations, stored, clock = values[0], values[1], values[2:17], values[17], values[18], values[19]
+    status, quiz, radios, stored, clock = values[0], values[1], values[2:17], values[17], values[18]
     assert len(radios) == MAX_TEST_QUESTIONS
     visible = [radio for radio in radios if radio.get("__update__") and radio["visible"]]
     hidden = [radio for radio in radios if not radio.get("visible")]
@@ -615,12 +629,13 @@ def test_practice_generate_reveals_one_radio_per_question(built: FakeGradio, stu
     assert stored is not None and len(stored.questions) == 3
     assert isinstance(clock, float)
     assert "3 question(s)" in status
+    assert "passage" not in status.lower()
 
 
 def test_practice_submit_scores_and_persists(built: FakeGradio, stub: StubTutor) -> None:
     platform = stub.platform()
     values = built.call("Generate test", "chapter", "physics", "Mechanics", 4)
-    test, clock = values[18], values[19]
+    test, clock = values[17], values[18]
     status, review, score = built.call(
         "Submit answers and score", test, clock, *_picks_for(test, answer=1)
     )
@@ -649,7 +664,7 @@ def test_practice_weak_area_button_points_at_the_revision_hub(built: FakeGradio,
 def test_progress_reads_the_store_after_a_test(built: FakeGradio, stub: StubTutor) -> None:
     platform = stub.platform()
     values = built.call("Generate test", "chapter", "physics", "Mechanics", 3)
-    test, clock = values[18], values[19]
+    test, clock = values[17], values[18]
     built.call("Submit answers and score", test, clock, *_picks_for(test, answer=2))
 
     headline, subjects, chapters, weak, activity, daily = built.call("Refresh")
@@ -664,7 +679,7 @@ def test_progress_reads_the_store_after_a_test(built: FakeGradio, stub: StubTuto
 def test_progress_reset_empties_the_store(built: FakeGradio, stub: StubTutor) -> None:
     platform = stub.platform()
     values = built.call("Generate test", "chapter", "physics", "Mechanics", 2)
-    built.call("Submit answers and score", values[18], values[19], *_picks_for(values[18]))
+    built.call("Submit answers and score", values[17], values[18], *_picks_for(values[17]))
     assert platform.progress.stats()["tests"] == 1
     headline = built.call("Reset history")[0]
     assert "History cleared" in headline
@@ -681,18 +696,19 @@ def test_revision_deliverables_are_all_offered(built: FakeGradio) -> None:
 
 
 def test_revision_sheet_keeps_its_section_contract(built: FakeGradio, stub: StubTutor) -> None:
-    status, sheet, citations, _weak = built.call("Generate sheet", "formula_sheet", "physics", "Mechanics")
+    status, sheet, _weak = built.call("Generate sheet", "formula_sheet", "physics", "Mechanics")
     assert "Status" in status
     assert "###" in sheet
     assert sheet != ""
-    assert citations
+    assert "passage" not in status.lower()
+    assert "[1]" not in sheet
 
 
 def test_revision_weak_area_sheet_uses_the_history(built: FakeGradio, stub: StubTutor) -> None:
     platform = stub.platform()
     values = built.call("Generate test", "chapter", "physics", "Mechanics", 4)
-    built.call("Submit answers and score", values[18], values[19], *_picks_for(values[18], answer=1))
-    status, sheet, _citations, weak = built.call("Revise my weak areas", "flash_notes")
+    built.call("Submit answers and score", values[17], values[18], *_picks_for(values[17], answer=1))
+    status, sheet, weak = built.call("Revise my weak areas", "flash_notes")
     assert platform.progress.stats()["revision_sheets"] == 1
     assert "Status" in status and sheet
     assert "Topic" in weak or "No weak areas" in weak or "no weak" in weak.lower()
@@ -730,5 +746,5 @@ def test_the_layout_is_rebuilt_on_a_second_call(fake_gr: FakeGradio, settings: A
 
 def test_clock_helper_is_used_for_duration(built: FakeGradio, stub: StubTutor) -> None:
     values = built.call("Generate test", "topic", "physics", "Newton's second law", 2)
-    started = values[19]
+    started = values[18]
     assert started <= time.monotonic()

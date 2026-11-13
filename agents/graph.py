@@ -3,35 +3,40 @@
 Flow::
 
     START -> router -> (doubt)      -> retrieval -> answer -> END
-                    -> (served by the selected answer mode)
-                    -> (planned)    -> deferred  -> END
-                    -> (on error)   -> failed    -> END
+                    -> (mcq)        -> MCQ generator            -> END
+                    -> (pyq)        -> PYQ retrieval            -> END
+                    -> (study_plan) -> study planner            -> END
+                    -> (weakness)   -> weakness analysis        -> END
+                    -> (planned)    -> deferred                  -> END
+                    -> (on error)   -> failed                    -> END
 
 The router decides the subject *and* the intent; the student separately picks
 an :class:`~utils.constants.AnswerMode` that controls how the answer is
 presented.  An explicit mode that can serve the detected intent (e.g. MCQ
 Practice for an ``mcq`` intent) keeps the turn inside the implemented
-pipeline instead of deferring it.  Only intents that no mode can serve yet
-(``pyq`` outside PYQ Focus, ``study_plan``, ``weakness``) reach ``deferred``,
-so the graph stays valid while those agents are built.
-Adding an agent later means registering a node and one conditional edge - see
-``agents/registry.py`` for the contract.
+pipeline instead of deferring it. Specialist intents use dedicated agents;
+concept questions continue through retrieval and answer generation.
 """
 
 from __future__ import annotations
 
 import time
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
 from agents.answer_agent import AnswerAgent
 from agents.base import AgentError, add_notice, emit_event
+from agents.mcq_agent import MCQGeneratorAgent
+from agents.pyq_agent import PYQRetrievalAgent
 from agents.registry import describe_registry, planned_agents, spec_for
 from agents.retrieval_agent import RetrievalAgent
 from agents.router_agent import RouterAgent
 from agents.state import TutorResult, TutorState
+from agents.study_plan_agent import StudyPlannerAgent
+from agents.weakness_agent import WeaknessAnalysisAgent
 from config import Settings
 from llm.base import LLMClient
 from prompts.loader import PromptLibrary
@@ -39,6 +44,9 @@ from rag.vector_store import VectorStoreManager
 from utils.constants import AnswerMode, Intent
 from utils.logging_utils import get_logger
 from utils.text_utils import clean_text
+
+if TYPE_CHECKING:
+    from learning.service import GeniePlatform
 
 __all__ = ["TutorGraph"]
 
@@ -48,6 +56,10 @@ logger = get_logger(__name__)
 NODE_ROUTER = "router"
 NODE_RETRIEVAL = "retrieval"
 NODE_ANSWER = "answer"
+NODE_MCQ = "mcq_generator"
+NODE_PYQ = "pyq_retrieval"
+NODE_STUDY_PLAN = "study_planner"
+NODE_WEAKNESS = "weakness_analysis"
 NODE_DEFERRED = "deferred"
 NODE_FAILED = "failed"
 
@@ -67,15 +79,32 @@ class TutorGraph:
         llm: LLMClient,
         vector_store: VectorStoreManager,
         prompts: PromptLibrary,
+        platform: GeniePlatform | None = None,
     ) -> None:
         self.settings = settings
         self.llm = llm
         self.vector_store = vector_store
         self.prompts = prompts
+        if platform is None:
+            from learning.service import GeniePlatform
+
+            platform = GeniePlatform(
+                settings,
+                vector_store=vector_store,
+                prompts=prompts,
+                llm=llm,
+            )
+        self.platform = platform
 
         self.router = RouterAgent(settings, llm=llm, prompts=prompts)
         self.retrieval = RetrievalAgent(settings, vector_store, prompts=prompts)
         self.answer = AnswerAgent(settings, llm=llm, prompts=prompts)
+        self.mcq_generator = MCQGeneratorAgent(settings, platform=self.platform, prompts=prompts)
+        self.pyq_retrieval = PYQRetrievalAgent(settings, platform=self.platform, prompts=prompts)
+        self.study_planner = StudyPlannerAgent(settings, platform=self.platform, prompts=prompts)
+        self.weakness_analysis = WeaknessAnalysisAgent(
+            settings, platform=self.platform, prompts=prompts
+        )
 
         self._graph = self._build()
 
@@ -86,6 +115,10 @@ class TutorGraph:
         graph.add_node(NODE_ROUTER, self._router_node)
         graph.add_node(NODE_RETRIEVAL, self._retrieval_node)
         graph.add_node(NODE_ANSWER, self._answer_node)
+        graph.add_node(NODE_MCQ, self._mcq_node)
+        graph.add_node(NODE_PYQ, self._pyq_node)
+        graph.add_node(NODE_STUDY_PLAN, self._study_plan_node)
+        graph.add_node(NODE_WEAKNESS, self._weakness_node)
         graph.add_node(NODE_DEFERRED, self._deferred_node)
         graph.add_node(NODE_FAILED, self._failed_node)
 
@@ -95,6 +128,10 @@ class TutorGraph:
             self._after_router,
             {
                 NODE_RETRIEVAL: NODE_RETRIEVAL,
+                NODE_MCQ: NODE_MCQ,
+                NODE_PYQ: NODE_PYQ,
+                NODE_STUDY_PLAN: NODE_STUDY_PLAN,
+                NODE_WEAKNESS: NODE_WEAKNESS,
                 NODE_DEFERRED: NODE_DEFERRED,
                 NODE_FAILED: NODE_FAILED,
             },
@@ -105,6 +142,10 @@ class TutorGraph:
             {NODE_ANSWER: NODE_ANSWER, NODE_FAILED: NODE_FAILED},
         )
         graph.add_edge(NODE_ANSWER, END)
+        graph.add_edge(NODE_MCQ, END)
+        graph.add_edge(NODE_PYQ, END)
+        graph.add_edge(NODE_STUDY_PLAN, END)
+        graph.add_edge(NODE_WEAKNESS, END)
         graph.add_edge(NODE_DEFERRED, END)
         graph.add_edge(NODE_FAILED, END)
 
@@ -121,6 +162,18 @@ class TutorGraph:
 
     def _answer_node(self, state: TutorState, config: RunnableConfig) -> dict[str, Any]:
         return self._guard(NODE_ANSWER, self.answer, state, config)
+
+    def _mcq_node(self, state: TutorState, config: RunnableConfig) -> dict[str, Any]:
+        return self._guard(NODE_MCQ, self.mcq_generator, state, config)
+
+    def _pyq_node(self, state: TutorState, config: RunnableConfig) -> dict[str, Any]:
+        return self._guard(NODE_PYQ, self.pyq_retrieval, state, config)
+
+    def _study_plan_node(self, state: TutorState, config: RunnableConfig) -> dict[str, Any]:
+        return self._guard(NODE_STUDY_PLAN, self.study_planner, state, config)
+
+    def _weakness_node(self, state: TutorState, config: RunnableConfig) -> dict[str, Any]:
+        return self._guard(NODE_WEAKNESS, self.weakness_analysis, state, config)
 
     def _deferred_node(self, state: TutorState, config: RunnableConfig) -> dict[str, Any]:
         """Polite response for intents whose agent is not implemented yet."""
@@ -157,13 +210,17 @@ class TutorGraph:
     def _after_router(self, state: TutorState) -> str:
         if state.get("error"):
             return NODE_FAILED
-        spec = spec_for(state.get("intent"))
-        if spec.available:
+        intent = Intent.coerce(state.get("intent"))
+        if not spec_for(intent).available:
+            return NODE_DEFERRED
+        if intent is Intent.DOUBT:
             return NODE_RETRIEVAL
-        # An explicit answer mode can serve the intent today (MCQ Practice /
-        # PYQ Focus), so the turn keeps flowing through retrieval + answer.
-        mode = AnswerMode.coerce(state.get("mode"), default=self.settings.answer_mode)
-        return NODE_RETRIEVAL if mode.satisfies(spec.intent) else NODE_DEFERRED
+        return {
+            Intent.MCQ: NODE_MCQ,
+            Intent.PYQ: NODE_PYQ,
+            Intent.STUDY_PLAN: NODE_STUDY_PLAN,
+            Intent.WEAKNESS: NODE_WEAKNESS,
+        }.get(intent, NODE_DEFERRED)
 
     def _after_retrieval(self, state: TutorState) -> str:
         return NODE_FAILED if state.get("error") else NODE_ANSWER
@@ -234,7 +291,17 @@ class TutorGraph:
     # --------------------------------------------------------------- metadata
     @property
     def node_names(self) -> list[str]:
-        return [NODE_ROUTER, NODE_RETRIEVAL, NODE_ANSWER, NODE_DEFERRED, NODE_FAILED]
+        return [
+            NODE_ROUTER,
+            NODE_RETRIEVAL,
+            NODE_ANSWER,
+            NODE_MCQ,
+            NODE_PYQ,
+            NODE_STUDY_PLAN,
+            NODE_WEAKNESS,
+            NODE_DEFERRED,
+            NODE_FAILED,
+        ]
 
     def architecture(self) -> str:
         """Human readable description of the graph for the UI."""
@@ -249,6 +316,8 @@ class TutorGraph:
         return (
             "User Question\n"
             "   -> Subject Router Agent        (subject + intent, JSON)\n"
+            "   -> Intent specialist           (MCQ / PYQ / study plan / weakness)\n"
+            "   -> Intent specialist           (MCQ / PYQ / study plan / weakness)\n"
             "   -> RAG Retrieval Agent         (FAISS top-k, subject filter, mode-scaled)\n"
             "   -> Answer Generation Agent     (Neet Genie persona + mode contract)\n"
             "   -> Coach format repair         (section headings for the mode)\n"

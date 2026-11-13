@@ -420,12 +420,12 @@ pytest -q
 The suite runs fully offline: `MockLLM` stands in for Qwen (it reads the `MODE_ID:` marker and answers
 in the selected mode's shape, and now also serves the Learn / MCQ / Revision generation prompts) and
 `DeterministicFakeEmbedding` stands in for MiniLM, so it covers document discovery/loading, chunking
-metadata, routing, FAISS persistence/filtering, citation formatting, streaming callbacks, the deferred-agent
-path, the tutor facade, the Gradio chat handler, the answer-mode contract (`tests/test_answer_modes.py`),
+metadata, routing, FAISS persistence/filtering, citation formatting, streaming callbacks, specialist-agent
+paths, the tutor facade, the Gradio chat handler, the answer-mode contract (`tests/test_answer_modes.py`),
 the coach pipeline end to end (`tests/test_coach_pipeline.py`) and the platform: the chapter catalog
 (`test_chapter_catalog.py`), assessment and grading (`test_assessment.py`), the JSON progress store
 (`test_progress_store.py`), the five platform services (`test_platform_services.py`) and all six tabs
-against a stand-in Gradio (`test_platform_panels.py`) - 175 tests in a few seconds.
+against a stand-in Gradio (`test_platform_panels.py`).
 `python scripts/offline_check.py` runs a smaller, stdlib-only subset - including the five required chat
 section titles, every mode's prompt contract, the chapter and revision section shapes, the catalog,
 grading, the progress store, the capability registry and the tab navigation - that works before any
@@ -433,30 +433,22 @@ dependency is installed.
 
 ---
 
-## 10. Extending the system
+## 10. Intent specialist agents
 
-Adding the **MCQ Generator Agent** (same pattern for PYQ, planner, weakness):
+The router dispatches specialist requests to dedicated handlers:
 
-1. Create `agents/mcq_agent.py`:
+* **MCQ Generator** uses the Practice service to generate questions from indexed study passages and
+  returns the answer key with available explanations.
+* **PYQ Retrieval** only presents results from indexed files identifiable as previous-year
+  question sources; it does not relabel generated practice questions as PYQs.
+* **Study Planner** schedules the indexed chapter catalog and recorded weak areas across the
+  requested number of weeks. It reports when the catalog is unavailable instead of inventing a
+  syllabus.
+* **Weakness Analysis** reports topic accuracy from completed Practice tests and asks for quiz
+  history when none is available.
 
-   ```python
-   from agents.base import BaseAgent
-
-   class MCQAgent(BaseAgent):
-       name = "mcq"
-
-       def run(self, state, config):
-           retrieved = state.get("retrieved", [])   # reuse the retrieval layer
-           ...
-           return {"answer": mcq_markdown}
-   ```
-
-2. In `agents/graph.py` add `graph.add_node("mcq", ...)` and extend `_after_router` to return
-   `"mcq"` for `Intent.MCQ`.
-3. In `agents/registry.py` flip the MCQ entry's `status` to `"active"`.
-
-Because the state already carries `retrieved`, `citations`, `subject`, `mode` and `history`, a new
-agent only needs its own prompt and generation logic.
+To add another intent, implement a `BaseAgent`, inject it with the shared `GeniePlatform` in
+`agents/graph.py`, add its routing node, then update `agents/registry.py` and focused graph tests.
 
 Until such an agent exists, the **MCQ Practice** and **PYQ Focus** answer modes already cover those
 requests inside the current pipeline - they reuse retrieval and change only the presentation, which is

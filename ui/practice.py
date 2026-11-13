@@ -15,7 +15,7 @@ from typing import Any, Mapping, Sequence
 from learning.assessment import GradedTest, MCQuestion
 from learning.practice import MAX_TEST_QUESTIONS, PracticeSet
 from learning.service import GeniePlatform
-from ui.components import citations_md, esc, notices_md, refresh, subject_choices, table
+from ui.components import esc, hide_source_markers, notices_md, refresh, subject_choices, table
 from utils.constants import TestScope
 from utils.text_utils import truncate
 
@@ -183,8 +183,6 @@ def build(
 
     review_box = gr.Markdown()
     score_box = gr.Markdown()
-    with gr.Accordion("📖 Textbook references", open=False):
-        citations_box = gr.Markdown("_Appears with the first generated test._")
 
     weak_btn = gr.Button("Revise my weak areas in the Revision Hub")
     weak_md = gr.Markdown()
@@ -206,7 +204,6 @@ def build(
         "submit": submit_btn,
         "review": review_box,
         "score": score_box,
-        "citations": citations_box,
         "state": current,
         "clock": started,
         "weak": weak_btn,
@@ -240,7 +237,7 @@ def wire(
 ) -> None:
     """Bind the Practice tab's controls to the Practice service."""
     answers = refs["answers"]
-    outputs_after_status = [refs["quiz"]] + answers + [refs["citations"], refs["state"], refs["clock"]]
+    outputs_after_status = [refs["quiz"]] + answers + [refs["state"], refs["clock"]]
 
     def pick_targets(scope: str, subject: str) -> Any:
         choices = _target_choices(platform.catalog(), scope, subject)
@@ -260,13 +257,12 @@ def wire(
                 visible=True,
             )
         status = (
-            f"**Status:** {test.count} question(s) generated in {test.scope} mode - "
-            f"{len(test.citations)} passage(s). Answer and press Submit."
+            f"**Status:** {test.count} question(s) generated in {test.scope} mode. "
+            "Answer and press Submit."
             if test.questions
             else "**Status:** no usable questions came back - see the notes below."
         )
-        return [status, test.quiz_markdown()] + updates + [
-            citations_md(test.citations),
+        return [status, hide_source_markers(test.quiz_markdown())] + updates + [
             test if test.questions else None,
             time.monotonic() if test.questions else None,
         ]
@@ -274,12 +270,16 @@ def wire(
     def score(test: PracticeSet | None, started: float | None, *picks: Any) -> list[Any]:
         if test is None:
             empty = "**Status:** generate a test first."
-            return [empty, empty, "_Nothing to cite._"]
+            return [empty, empty, empty]
         result = submit(platform, test, picks, started=started)
         if result is None:
-            return ["**Status:** that test has no questions left in memory - generate it again.",
-                    "_Generate a new test to answer._", "_Nothing to cite._"]
-        return [f"**Submitted.** {esc(result.summary_line)}", result.report_markdown(reveal=True), score_md(result)]
+            status = "**Status:** that test has no questions left in memory - generate it again."
+            return [status, "_Generate a new test to answer._", status]
+        return [
+            f"**Submitted.** {esc(result.summary_line)}",
+            hide_source_markers(result.report_markdown(reveal=True)),
+            score_md(result),
+        ]
 
     def clear(*_ignored: Any) -> list[Any]:
         return [refresh(value=None) for _ in answers]
