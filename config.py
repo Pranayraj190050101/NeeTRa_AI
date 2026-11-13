@@ -93,10 +93,8 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------ app
-    # Product name shown in the Gradio page title, header and reports.  The
-    # coach persona inside the prompts is still "Neet Genie" (see
-    # prompts/persona.txt); override this with NEET_APP_NAME.
-    app_name: str = "🧞 NEET Genie"
+    # Product name shown in the Gradio page title, header and reports.
+    app_name: str = "NEETra AI"
     app_tagline: str = "Every NEET Doubt. One Wish Away."
     app_version: str = "1.1.0"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -134,7 +132,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------- llm
     #: Legacy backend switch, kept for backward compatibility.  Overridden by
     #: ``LLM_PROVIDER`` when that is set (see :attr:`resolved_llm_provider`).
-    llm_backend: LLMBackend = "hf"
+    #: Default to the offline mock backend so the app can boot in local/student
+    #: mode without loading a hosted model or downloading weights.
+    llm_backend: LLMBackend = "mock"
     llm_model: str = "Qwen/Qwen2.5-7B-Instruct"
     llm_device: DevicePreference = "auto"
     llm_dtype: DTypeName = "auto"
@@ -183,11 +183,10 @@ class Settings(BaseSettings):
     #: Progress / Revision).
     platform_enabled: bool = True
     #: Show the Learn module.  ``NEETRA_ENABLE_LEARN=false`` hides the tab and
-    #: skips the Learn UI entirely - the product focuses on doubt solving,
-    #: practice and revision, while ``learning/learn.py`` and its tests stay
-    #: untouched and the module can be re-enabled by the environment at any
-    #: time (this is the backward-compatible default: on).
-    learn_enabled: bool = Field(default=True, validation_alias="NEETRA_ENABLE_LEARN")
+    #: skips the Learn UI entirely.  The student product defaults to the
+    #: Ask → Practice → Progress → Revision → Dashboard flow, with Learn kept
+    #: as an opt-in compatibility escape hatch for older chapter-study workflows.
+    learn_enabled: bool = Field(default=False, validation_alias="NEETRA_ENABLE_LEARN")
     #: Questions per generated test in the Practice module.
     test_question_count: int = Field(default=5, ge=2, le=15)
     #: NEET marking scheme used for a correct answer.

@@ -33,6 +33,7 @@ from learning.capabilities import (
 )
 from learning.catalog import ChapterCatalog
 from learning.generation import GenieGenerator
+from learning.photo_ocr import LocalImageSolver
 from learning.learn import LearnService
 from learning.motivation import Motivation, daily_motivation
 from learning.practice import PracticeService, PracticeSet
@@ -132,6 +133,7 @@ class GeniePlatform:
         )
         self.progress = ProgressStore(progress_path or settings.progress_dir)
         self.capabilities: CapabilityRegistry = default_registry()
+        self.capabilities.register("image", LocalImageSolver())
 
         self._catalog: ChapterCatalog = ChapterCatalog.empty()
         self._catalog_loaded = False
@@ -195,8 +197,10 @@ class GeniePlatform:
         catalog = self.catalog()
         index = self._index_summary()
         motivation = self.motivation(stats)
-        # Keep dashboard metadata aligned with the six student-facing modules.
-        modules = ["Dashboard", "Learn", "Practice", "Ask Genie", "Progress", "Revision Hub"]
+        # Keep dashboard metadata aligned with the productized student flow.
+        modules = ["Ask Genie", "Practice", "Progress", "Revision Hub", "Dashboard"]
+        if self.settings.learn_enabled:
+            modules.append("Learn")
         return {
             "welcome": {
                 "name": self.settings.app_name,
@@ -360,6 +364,11 @@ class GeniePlatform:
         solver = self.capabilities.require("image")
         question = solver.extract_question(image, subject=subject)
         return self.ask(question, subject=subject or "auto", **ask_kwargs)
+
+    def extract_photo_question(self, image: bytes, *, subject: str | None = None) -> str:
+        """Read a photo question for the student to review before sending."""
+        solver = self.capabilities.require("image")
+        return solver.extract_question(image, subject=subject)
 
     def capability(self, key: str) -> Capability | None:
         return self.capabilities.get(key)

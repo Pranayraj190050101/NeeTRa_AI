@@ -74,6 +74,30 @@ def test_responder_honours_the_selected_mode(
     assert "\U0001f4d8 Concept Explanation" not in answer, "explanation sections belong to other modes"
 
 
+def test_cell_cycle_quick_revision_answers_without_an_index(
+    settings: Settings, tmp_path: Any
+) -> None:
+    offline_settings = settings.model_copy(update={"vector_store_dir": tmp_path / "empty-vectordb"})
+    tutor = NEETTutor(
+        offline_settings,
+        llm=MockLLM(offline_settings),
+        vector_store=VectorStoreManager(offline_settings),
+    )
+    readiness = tutor.validate_startup()
+    assert readiness["checks"]["llm"]["ready"]
+    assert not readiness["checks"]["retrieval"]["ready"]
+
+    answer = _run(
+        build_responder(tutor, offline_settings),
+        "Give quick revision notes for Cell Cycle",
+        mode="quick_revision",
+    )[-1][0][-1]["content"]
+
+    assert "Give quick revision notes for Cell Cycle" in answer
+    assert "Quick Revision Notes" in answer
+    assert "could not finish" not in answer.lower()
+
+
 def test_responder_rejects_empty_message(
     settings: Settings, vector_store: VectorStoreManager
 ) -> None:

@@ -290,10 +290,13 @@ class NEETTutor:
 
         platform = self._platform
         registry = platform.capabilities if platform is not None else default_registry()
+        modules = ["Ask Genie", "Practice", "Progress", "Revision Hub", "Dashboard"]
+        if self.settings.learn_enabled:
+            modules.append("Learn")
         return {
             "enabled": self.settings.platform_enabled,
             "built": platform is not None,
-            "modules": ["Dashboard", "Learn", "Practice", "Ask Genie", "Progress", "Revision Hub"],
+            "modules": modules,
             "learn_sections": list(CHAPTER_SECTIONS),
             "test_scopes": [scope.value for scope in TestScope],
             "revision_deliverables": [item.value for item in RevisionDeliverable],

@@ -377,15 +377,15 @@ Answer Key
     from ui import components as genie_ui  # noqa: PLC0415 - stdlib-only import
 
     check(
-        "the navigation is the six modules in brief order",
+        "the student navigation uses the product order",
         [label for label, _ in genie_ui.MODULE_TABS]
-        == ["Dashboard", "Learn", "Practice", "Ask Genie", "Progress", "Revision Hub"],
+        == ["Ask Genie", "Practice", "Progress", "Revision Hub", "Dashboard"],
         str(genie_ui.MODULE_TABS),
     )
     check(
         "tab ids are stable for programmatic jumps",
         [key for _, key in genie_ui.MODULE_TABS]
-        == ["dashboard", "learn", "practice", "ask-genie", "progress", "revision"],
+        == ["ask-genie", "practice", "progress", "revision", "dashboard"],
         str(genie_ui.MODULE_TABS),
     )
     check("table cells are escaped", genie_ui.esc("a | b\nc") == "a \\| b c", genie_ui.esc("a | b\nc"))
