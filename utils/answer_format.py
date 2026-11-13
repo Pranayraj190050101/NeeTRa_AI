@@ -155,56 +155,6 @@ _MAX_HEADING_CHARS = 60
 _SENTENCE_PUNCT = (".", "!", "?")
 _BULLET_PREFIXES = ("```", ">", "|", "- ", "* ", "\u2022 ", "1.", "2.", "3.", "Q.")
 
-#: Coach-authored filler, keyed by canonical title.  No invented facts.
-_IMPORTANCE_FALLBACK = (
-    "- Straight NCERT statement questions plus one application-based question are the usual pattern.\n"
-    "- Master the definition, the standard unit or formula, and the exception - that is what is asked.\n"
-    "- Practice the NCERT exemplar and back-exercise questions on this topic after reading it."
-)
-
-_IMPORTANCE_BY_SUBJECT: dict[Subject, str] = {
-    Subject.PHYSICS: (
-        "- NEET physics asks this as a formula/application question: know the expression, its units "
-        "and the limiting cases.\n"
-        "- Dimensions and unit checks solve most of the objective options without a full calculation.\n"
-        "- Graphs and ratio-type questions (\u201cif n is doubled, then\u2026\u201d) are the usual twist."
-    ),
-    Subject.CHEMISTRY: (
-        "- NEET chemistry asks this as a factual NCERT line plus one numerical/application item.\n"
-        "- Learn the exceptions and the order/trend questions - they separate toppers from the rest.\n"
-        "- For physical chemistry keep the units and significant figures exactly as NCERT states them."
-    ),
-    Subject.BIOLOGY: (
-        "- Biology is the most NCERT-verbatim paper: the exact textbook wording becomes the option.\n"
-        "- Expect statement-based and assertion-reason items from this section's tables and examples.\n"
-        "- Learn the scientists, dates, examples and Latin names given in the chapter text."
-    ),
-}
-
-_MISTAKES_FALLBACK = (
-    "- Reading the chapter once and treating it as revision - recall it in one line without looking.\n"
-    "- Confusing this idea with the nearest-looking one; keep a one-line difference note.\n"
-    "- Ignoring units, sign conventions or the stated conditions of the formula or statement."
-)
-
-_MISTAKES_BY_SUBJECT: dict[Subject, str] = {
-    Subject.PHYSICS: (
-        "- Substituting values before converting every quantity to SI units.\n"
-        "- Dropping the sign convention (work, potential, momentum direction).\n"
-        "- Applying a formula outside the condition it was derived for (constant force, small angle, ideal gas)."
-    ),
-    Subject.CHEMISTRY: (
-        "- Balancing an equation but forgetting state symbols or the 1 : 1 mole ratio in the numerical.\n"
-        "- Mixing up similar reagents/order rules; write the difference next to each name.\n"
-        "- Rounding intermediate values and then losing accuracy in the final answer."
-    ),
-    Subject.BIOLOGY: (
-        "- Paraphrasing NCERT lines in your own words, then losing marks on statement-based options.\n"
-        "- Skipping the chapter's figures, tables and boxed items, which are mined for PYQs.\n"
-        "- Confusing similar terms (homologous/analogous, xylem/phloem stages, alike-sounding hormones)."
-    ),
-}
-
 _EXAMPLE_MARKER = "_(the model did not fill this block - re-ask after indexing the chapter)_"
 
 
@@ -320,12 +270,32 @@ def _bullets(sentences: list[str]) -> str:
     return "\n".join(f"- {sentence}" for sentence in sentences)
 
 
-def _importance_body(subject: Subject | None) -> str:
-    return _IMPORTANCE_BY_SUBJECT.get(subject or Subject.GENERAL, _IMPORTANCE_FALLBACK)
+def _revision_body_from_answer(bodies: dict[str, list[str]]) -> str:
+    """Reuse concise topic facts when the model omits its revision recap."""
+    candidates: list[str] = []
+    for title in (EXPLANATION_SECTIONS[0], EXPLANATION_SECTIONS[2]):
+        body, _ = _merge_unique_bodies(bodies[title])
+        for line in body.splitlines():
+            line = re.sub(r"^[ \t]*(?:[-*+]\s*|\d+[.)]\s*)", "", line).strip()
+            line = re.sub(r"\*\*(.+?)\*\*", r"\1", line)
+            for sentence in _SENTENCE_RE.split(line):
+                candidate = sentence.strip()
+                if 24 <= len(candidate) <= 150 and candidate not in candidates:
+                    candidates.append(candidate)
+                if len(candidates) == 3:
+                    return _bullets(candidates)
+    return _bullets(candidates)
 
 
-def _mistakes_body(subject: Subject | None) -> str:
-    return _MISTAKES_BY_SUBJECT.get(subject or Subject.GENERAL, _MISTAKES_FALLBACK)
+def _importance_body() -> str:
+    return (
+        "- No question-frequency claim is made without a source; revise the topic's NCERT definition "
+        "and stated application."
+    )
+
+
+def _mistakes_body() -> str:
+    return "- Check each symbol or term and its stated condition before applying the answer."
 
 
 def fallback_body(
@@ -346,9 +316,8 @@ def fallback_body(
         if sentences:
             return _bullets(sentences[:2])
         return (
-            "- No textbook passage was retrieved for this question, so a grounded explanation "
-            "cannot be written yet.\n"
-            "- Index the relevant chapter (`python -m rag.ingest --rebuild`) and ask again."
+            "- No relevant textbook passage was retrieved; verify this topic's definition and "
+            "formula in the relevant NCERT chapter."
         )
     if "key points" in normalised:
         if sentences:
@@ -361,17 +330,17 @@ def fallback_body(
     if "quick revision notes" in normalised:
         if sentences:
             return "\n".join(f"- {sentence[:160]}" for sentence in sentences[:5])
-        return "- Re-read the cited passage the same day, then again after three days."
+        return "- Recall the topic's definition, relation and condition from the explanation above."
     if "neet importance" in normalised:
-        return _importance_body(subject)
+        return _importance_body()
     if "common student mistakes" in normalised:
-        return _mistakes_body(subject)
+        return _mistakes_body()
     if "practice mcqs" in normalised:
         return _EXAMPLE_MARKER
     if "answer key" in normalised:
         return _EXAMPLE_MARKER
     if "traps" in normalised:
-        return _mistakes_body(subject)
+        return _mistakes_body()
     if "how neet asks this" in normalised:
         return (
             "- PYQs on a topic like this are usually re-worded NCERT lines, so the chapter text is "
@@ -389,10 +358,12 @@ class FormatRepair:
     text: str
     relabelled: int = 0
     added: list[str] = field(default_factory=list)
+    reordered: bool = False
+    deduplicated: int = 0
 
     @property
     def changed(self) -> bool:
-        return bool(self.relabelled or self.added)
+        return bool(self.relabelled or self.added or self.reordered or self.deduplicated)
 
     def summary(self) -> str:
         """Short, user-facing description of what was repaired."""
@@ -401,7 +372,66 @@ class FormatRepair:
             bits.append(f"standardised {self.relabelled} heading(s)")
         if self.added:
             bits.append(f"added {len(self.added)} missing section(s): " + ", ".join(self.added))
+        if self.reordered:
+            bits.append("put sections in the required order")
+        if self.deduplicated:
+            bits.append(f"merged {self.deduplicated} duplicate section(s)")
         return "; ".join(bits)
+
+
+def _section_bodies(text: str, mode: AnswerMode | str | None) -> tuple[dict[str, list[str]], int, bool]:
+    """Collect recognized sections in order, keeping preamble with the concept."""
+    titles = sections_for(mode)
+    lines = text.splitlines()
+    starts: list[tuple[int, str]] = []
+    for index, line in enumerate(lines):
+        raw_title = _heading_title(line)
+        canonical = _canonicalise(raw_title, titles) if raw_title else None
+        if canonical:
+            starts.append((index, canonical))
+
+    original_order = [title for _, title in starts]
+    reordered = original_order != sorted(original_order, key=titles.index)
+    duplicate_count = len(starts) - len(set(original_order))
+    bodies: dict[str, list[str]] = {title: [] for title in titles}
+    if not starts:
+        if text.strip():
+            bodies[titles[0]].append(text.strip())
+        return bodies, 0, False
+
+    preamble = "\n".join(lines[: starts[0][0]]).strip()
+    if preamble:
+        bodies[titles[0]].append(preamble)
+    for position, (start, title) in enumerate(starts):
+        stop = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
+        body_lines = lines[start + 1 : stop]
+        # Keep useful subhead labels, but prevent them from looking like extra
+        # top-level sections outside the five-heading contract.
+        body_lines = [
+            f"**{match.group('title').strip()}**" if (match := _MD_HEADING_RE.match(line.strip())) else line
+            for line in body_lines
+        ]
+        body = "\n".join(body_lines).strip()
+        if body:
+            bodies[title].append(body)
+    return bodies, duplicate_count, reordered
+
+
+def _merge_unique_bodies(bodies: list[str]) -> tuple[str, int]:
+    """Merge repeated section bodies without repeating identical paragraphs."""
+    paragraphs: list[str] = []
+    seen: set[str] = set()
+    removed = 0
+    for body in bodies:
+        for paragraph in re.split(r"\n[ \t]*\n", body.strip()):
+            paragraph = paragraph.strip()
+            key = re.sub(r"\s+", " ", paragraph).casefold()
+            if not paragraph or key in seen:
+                removed += bool(paragraph)
+                continue
+            seen.add(key)
+            paragraphs.append(paragraph)
+    return "\n\n".join(paragraphs), removed
 
 
 def enforce_format(
@@ -411,16 +441,35 @@ def enforce_format(
     subject: str | Subject | None = None,
     context: str = "",
 ) -> FormatRepair:
-    """Guarantee the mode's section contract on the final answer."""
+    """Guarantee one canonical, ordered copy of each required section."""
     resolved_subject = subject if isinstance(subject, Subject) else Subject.coerce(subject)
     repaired, relabelled = apply_headings(text, mode)
-    missing = missing_sections(repaired, mode)
+    bodies, duplicate_sections, reordered = _section_bodies(repaired, mode)
+    added: list[str] = []
+    deduplicated = duplicate_sections
+    blocks: list[str] = []
+    for title in sections_for(mode):
+        body, removed_paragraphs = _merge_unique_bodies(bodies[title])
+        deduplicated += removed_paragraphs
+        if not body:
+            body = (
+                _revision_body_from_answer(bodies)
+                if mode in (AnswerMode.DETAILED, AnswerMode.QUICK_REVISION)
+                and title == EXPLANATION_SECTIONS[-1]
+                else ""
+            )
+            if not body:
+                body = fallback_body(title, subject=resolved_subject, context=context)
+            added.append(title)
+        blocks.append(f"### {title}\n\n{body}")
 
-    for title in missing:
-        body = fallback_body(title, subject=resolved_subject, context=context)
-        repaired = f"{repaired.rstrip()}\n\n### {title}\n\n{body}\n"
-
-    return FormatRepair(text=repaired.rstrip(), relabelled=relabelled, added=missing)
+    return FormatRepair(
+        text="\n\n".join(blocks).rstrip(),
+        relabelled=relabelled,
+        added=added,
+        reordered=reordered,
+        deduplicated=deduplicated,
+    )
 
 
 def format_contract(mode: AnswerMode | str | None) -> str:

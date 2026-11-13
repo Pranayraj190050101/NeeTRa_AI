@@ -7,6 +7,7 @@ Neet Genie persona and delivered in the selected mode's section format.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -51,8 +52,12 @@ def test_system_prompt_combines_persona_grounding_and_mode(
 
     # 1. NEET faculty persona
     assert "NEET GENIE" in text
-    assert "15 years" in text
-    assert "HIGH-YIELD" in text and "TRAP" in text
+    assert "teach for understanding" in text.lower()
+    assert "search results" in text.lower()
+    assert "never invent a neet question pattern" in text.lower()
+    if mode in (AnswerMode.DETAILED, AnswerMode.QUICK_REVISION):
+        assert "do not restate a fact" in text.lower()
+        assert "do not cite irrelevant blocks" in text.lower()
     # 2. the existing grounding rules are still injected
     assert "Reference material" in text or "reference" in text.lower()
     # 3. machine readable marker + the mode contract, in prompt order
@@ -192,6 +197,98 @@ def test_format_repair_is_reported_as_a_notice(
     assert any("Coach format applied" in notice for notice in update[1])
     for title in sections_for(AnswerMode.QUICK_REVISION):
         assert title in update[0]
+
+
+def test_answer_postprocess_keeps_only_citations_from_supplied_blocks(
+    settings: Settings, prompts: PromptLibrary
+) -> None:
+    agent = _agent(settings, prompts)
+    raw = (
+        "### Concept Explanation\n\nClaim [1]. Unrelated claim [2]. Unsupported claim [8]. "
+        r"Formula: K_{max}=h\nu-\phiK_{max}=h\nu-\phi." "\n\n"
+        "### NEET Importance\n\nA testable point.\n\n"
+        "### Key Points\n\n- Point.\n\n"
+        "### Common Mistakes\n\n- Mistake.\n\n"
+        "### Quick Revision\n\n- Recall."
+    )
+    context = (
+        "[1] photoelectric_effect.pdf | page 4 | subject: physics\nThe photoelectric effect.\n\n"
+        "[2] mechanics.pdf | page 11 | subject: physics\nKinetic energy and potential energy."
+    )
+
+    answer, _ = agent._postprocess(
+        raw,
+        mode=AnswerMode.QUICK_REVISION,
+        subject="physics",
+        context=context,
+        question="Explain the photoelectric effect for NEET",
+        notices=[],
+    )
+    no_context_answer, _ = agent._postprocess(
+        raw,
+        mode=AnswerMode.QUICK_REVISION,
+        subject="physics",
+        context="",
+        notices=[],
+    )
+    irrelevant_context_answer, _ = agent._postprocess(
+        "### Concept Explanation\n\nThe photoelectric effect ejects electrons.",
+        mode=AnswerMode.QUICK_REVISION,
+        subject="physics",
+        context="[1] mechanics.pdf | page 11 | subject: physics\nKinetic energy and potential energy.",
+        question="Explain the photoelectric effect for NEET",
+        notices=[],
+    )
+
+    assert "[1]" in answer
+    assert "[8]" not in answer
+    assert "[2]" not in answer
+    assert answer.count(r"$K_{max}=h\nu-\phi$") == 1
+    assert "[1]" not in no_context_answer
+    assert "kinetic energy" not in irrelevant_context_answer.lower()
+
+
+def test_answer_postprocess_repairs_the_reported_formula_corruption_and_limits_revision(
+    settings: Settings, prompts: PromptLibrary
+) -> None:
+    agent = _agent(settings, prompts)
+    raw = r"""### 📘 Concept Explanation
+The photoelectric effect is the emission of electrons when light of sufficient frequency strikes a metal.
+Photon energy is E=hfE=hf, where hh is Planck's constant and ff is frequency.
+The maximum kinetic energy is K\_{$max} = hf - \\phi_0$.
+
+### 🎯 NEET Importance
+NEET frequently tests KmaxKmax and the stopping potential eV0=Kmax.
+
+### 🧠 Key Points To Remember
+- KmaxKmax = hf - ϕ0ϕ0.
+- f0=ϕ0hf0=hϕ0.
+
+### ⚠ Common Student Mistakes
+- Increasing intensity below threshold frequency causes emission.
+- Intensity changes KmaxKmax.
+
+### ✅ Quick Revision Notes
+- E=hfE=hf.
+- K\_{$max} = eV_0$.
+- f<f0 -> no emission."""
+
+    answer, _ = agent._postprocess(
+        raw,
+        mode=AnswerMode.QUICK_REVISION,
+        subject="physics",
+        context="",
+        notices=[],
+        question="Explain the photoelectric effect for NEET.",
+    )
+
+    assert answer.count("$E=hf$") == 1
+    assert answer.count("$K_{max}= hf - \\phi_0$") == 1
+    assert r"K\_{$max}" not in answer
+    assert "E=hfE=hf" not in answer
+    assert "KmaxKmax" not in answer
+    assert "NEET frequently tests" not in answer
+    assert sum(len(re.findall(r"[\w]+(?:['’-][\w]+)*", line)) for line in answer.splitlines()) <= 155
 
 
 def test_mock_backend_follows_the_mode_marker(

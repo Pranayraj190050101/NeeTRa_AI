@@ -138,6 +138,48 @@ def test_missing_sections_are_appended_in_canonical_order() -> None:
     assert order == REQUIRED_FORMAT, "sections must keep the promised order"
 
 
+def test_repair_deduplicates_and_reorders_repeated_sections() -> None:
+    text = (
+        "### Quick Revision\n\n- One photoelectric-effect recall point.\n\n"
+        "### Concept Explanation\n\nThe photoelectric effect ejects electrons.\n\n"
+        "### Quick Revision Notes\n\n- One photoelectric-effect recall point.\n\n"
+        "### NEET Importance\n\n- Recall the threshold frequency."
+    )
+
+    repaired = enforce_format(text, AnswerMode.QUICK_REVISION)
+    headings = [line for line in repaired.text.splitlines() if line.startswith("### ")]
+
+    assert headings == [f"### {title}" for title in REQUIRED_FORMAT]
+    assert repaired.text.count("One photoelectric-effect recall point.") == 1
+    assert repaired.reordered
+    assert repaired.deduplicated >= 1
+    assert repaired.changed
+
+
+def test_missing_revision_fallback_stays_on_topic_and_avoids_unsourced_claims() -> None:
+    repaired = enforce_format("", AnswerMode.QUICK_REVISION, subject="physics")
+
+    assert "potential energy" not in repaired.text.lower()
+    assert "capacitance" not in repaired.text.lower()
+    assert "question-frequency claim" in repaired.text
+
+
+def test_missing_revision_section_reuses_the_answered_topic() -> None:
+    answer = (
+        "### Concept Explanation\n\n"
+        "Threshold frequency is the minimum frequency that causes photoelectric emission.\n\n"
+        "### Key Points\n\n"
+        "- Below threshold, increasing intensity does not cause emission."
+    )
+
+    repaired = enforce_format(answer, AnswerMode.QUICK_REVISION, subject="physics")
+    revision = repaired.text.split("### ✅ Quick Revision Notes\n\n", 1)[1]
+
+    assert "Threshold frequency is the minimum frequency" in revision
+    assert "potential energy" not in revision.lower()
+    assert "capacitance" not in revision.lower()
+
+
 def test_repair_uses_retrieved_context_instead_of_inventing_facts() -> None:
     context = (
         "[1] mole_concept.pdf | page 7 | subject: chemistry\n"

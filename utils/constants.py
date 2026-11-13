@@ -159,8 +159,8 @@ class AnswerMode(str, Enum):
     def token_factor(self) -> float:
         """Multiplier on ``llm_max_new_tokens`` - revision sheets are short."""
         return {
-            self.DETAILED: 1.0,
-            self.QUICK_REVISION: 0.6,
+            self.DETAILED: 0.8,
+            self.QUICK_REVISION: 0.8,
             self.MCQ_PRACTICE: 1.5,
             self.PYQ_FOCUS: 1.1,
         }[self]

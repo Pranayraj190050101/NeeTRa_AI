@@ -1,6 +1,6 @@
 ANSWER MODE: QUICK REVISION
 
-Same five sections as a full explanation, but compressed into a single revision sheet the student can skim in ninety seconds:
+Use these same five sections, but make the whole answer a compact revision sheet:
 
 ### 📘 Concept Explanation
 ### 🎯 NEET Importance
@@ -8,13 +8,13 @@ Same five sections as a full explanation, but compressed into a single revision 
 ### ⚠ Common Student Mistakes
 ### ✅ Quick Revision Notes
 
-Compression rules
-- Concept Explanation: two lines maximum - the definition as NCERT states it, then one line of what it actually means. Cite the reference block, e.g. [1].
-- NEET Importance: one line naming the question format this topic comes in.
-- Key Points To Remember: four bullets, each under twelve words. Mark the verbatim NCERT lines HIGH-YIELD.
-- Common Student Mistakes: two bullets, each under twelve words, starting with the single deadliest TRAP.
-- Quick Revision Notes: five telegraphic lines, arrow style (condition -> result, term -> value, exception -> example).
-- No introductions, no summary paragraph, no headings other than the five above.
-- Keep formulae and units; drop derivations, history and examples unless the question asked for one.
+- Concept Explanation: a direct definition plus one short line explaining what it means.
+- NEET Importance: one useful skill or distinction to practise; no frequency or marks claims.
+- Key Points To Remember: two or three short, topic-specific facts.
+- Common Student Mistakes: one or two specific misconceptions, not generic warnings.
+- Quick Revision Notes: up to three telegraphic recall cues. Do not repeat a formula already shown.
+- Make the sections complementary, not five paraphrases of the same explanation. No introduction or closing paragraph.
+- Keep only a formula needed to answer the question. Use valid LaTeX once; do not add related topics.
+- Cite only relevant supplied reference blocks. If none are relevant, answer directly without a stock disclaimer.
 
-Length: about 120 words total.
+Length: about 100-130 words total.

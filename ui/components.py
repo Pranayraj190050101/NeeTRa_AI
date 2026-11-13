@@ -17,6 +17,7 @@ the planner agent) only has to reuse the formatters below to look native.
 from __future__ import annotations
 
 import inspect
+import re
 from datetime import date
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -36,6 +37,7 @@ __all__ = [
     "doc_md",
     "esc",
     "inject_gradio",
+    "hide_source_markers",
     "lazy_gradio",
     "notices_md",
     "pct",
@@ -143,6 +145,12 @@ def esc(value: Any) -> str:
     """Make text safe for a markdown table cell."""
     text = value if isinstance(value, str) else ("" if value is None else str(value))
     return clean_text(text).replace("|", "\\|").replace("\n", " ")
+
+
+def hide_source_markers(text: Any) -> str:
+    """Hide inline numeric source markers while retaining the grounded content."""
+    value = "" if text is None else str(text)
+    return re.sub(r"(?<![\w,])\[\d+\](?!\s*,\s*\d)", "", value)
 
 
 def table(headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> str:

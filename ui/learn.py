@@ -14,7 +14,7 @@ from typing import Any, Mapping
 from learning.catalog import ChapterCatalog
 from learning.service import GeniePlatform
 from learning.sections import CHAPTER_SECTIONS, format_section_contract
-from ui.components import citations_md, esc, notices_md, refresh, subject_choices, table
+from ui.components import esc, hide_source_markers, notices_md, refresh, subject_choices, table
 
 __all__ = [
     "build",
@@ -28,7 +28,7 @@ __all__ = [
 
 INTRO = (
     "Pick a subject and chapter for a guided study page with a summary, high-yield "
-    "concepts, NEET points, quick revision notes and textbook references."
+    "concepts, NEET points and quick revision notes."
 )
 
 
@@ -48,11 +48,10 @@ def learn_intro_md(catalog: ChapterCatalog) -> str:
                 chapter.subject.title(),
                 chapter.name,
                 "Guided study page",
-                chapter.file_name,
             )
             for chapter in catalog.chapters
         ]
-        lines.append("\n**Available chapters**\n\n" + table(("Subject", "Chapter", "Study sections", "Book"), rows))
+        lines.append("\n**Available chapters**\n\n" + table(("Subject", "Chapter", "Study sections"), rows))
     return "\n".join(lines)
 
 
@@ -93,25 +92,17 @@ def status_md(doc: Any) -> str:
         return "**Status:** nothing generated - select a chapter or name a topic."
     icon = "\U0001f4d8" if doc.kind == "chapter" else "\U0001f50e"
     state = "ready" if doc.ok else "please try again"
-    references = f" · {len(doc.citations)} textbook reference(s)" if doc.citations else ""
-    return f"**Status:** {icon} {esc(doc.title)} — {state}{references}"
+    return f"**Status:** {icon} {esc(doc.title)} — {state}"
 
 
-def page_md(doc: Any, *, subject: str | None = None) -> str:
+def page_md(doc: Any) -> str:
     """Generated chapter page with its notices."""
     if doc is None:
         return "_Nothing generated yet._"
     if not getattr(doc, "ok", True):
         return esc(doc.markdown) or "**Generation failed.**"
-    if doc.citations:
-        kicker = (
-            f"_{subject.title() if subject else ''} explained using {len(doc.citations)} "
-            "textbook reference(s)_".lstrip()
-        )
-    else:
-        kicker = "_Written as a general study guide; textbook references were not available._"
-    body = f"## {esc(doc.title)}\n\n{doc.markdown}"
-    return "\n\n".join(part for part in (kicker, body, notices_md(doc.notices)) if part)
+    body = f"## {esc(doc.title)}\n\n{hide_source_markers(doc.markdown)}"
+    return "\n\n".join(part for part in (body, notices_md(doc.notices)) if part)
 
 
 # ---------------------------------------------------------------------------
@@ -160,8 +151,6 @@ def build(
         refresh_btn = gr.Button("Refresh chapters", size="sm", scale=1)
     status_box = gr.Markdown("_Pick a chapter (or type a topic), then press Generate._")
     page_box = gr.Markdown()
-    with gr.Accordion("📖 Textbook references", open=False):
-        citations_box = gr.Markdown("_Citations appear after the first page._")
     ask_btn = gr.Button("Ask Genie about this chapter")
     ask_md = gr.Markdown()
 
@@ -174,7 +163,6 @@ def build(
         "refresh": refresh_btn,
         "status": status_box,
         "page": page_box,
-        "citations": citations_box,
         "ask": ask_btn,
         "ask_md": ask_md,
     }
@@ -212,8 +200,8 @@ def wire(
         doc = study(platform, subject, chapter, topic)
         if doc is None:
             hint = empty_catalog_md() if platform.catalog().is_empty else "_Pick a chapter or name a topic._"
-            return [hint, status_md(None), "_No textbook references available._"]
-        return [page_md(doc, subject=subject), status_md(doc), citations_md(doc.citations)]
+            return [hint, status_md(None)]
+        return [page_md(doc), status_md(doc)]
 
     def draft_question(chapter: str, topic: str) -> list[Any]:
         focus = esc(chapter) or esc(topic) or "this chapter"
@@ -235,7 +223,7 @@ def wire(
     refs["generate"].click(
         generate,
         inputs=[refs["subject"], refs["chapter"], refs["topic"]],
-        outputs=[refs["page"], refs["status"], refs["citations"]],
+        outputs=[refs["page"], refs["status"]],
     )
 
     ask_outputs = [refs["ask_md"]]
