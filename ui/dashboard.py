@@ -187,7 +187,7 @@ def recommended_topic_md(platform: GeniePlatform) -> str:
         return (
             "### 🎯 Recommended Next Study Topic\n\n"
             f"**Start with {esc(chapter.name)}** in {esc(chapter.subject.title())}. "
-            "Open Learn for a guided study page, then test yourself in Practice."
+            "Ask Genie for a quick explanation, then test yourself in Practice."
         )
     return (
         "### 🎯 Recommended Next Study Topic\n\n"
@@ -206,15 +206,19 @@ def actions_md(actions: list[Mapping[str, Any]]) -> str:
 def dashboard_markdown(platform: GeniePlatform) -> str:
     """The complete student dashboard as one document (used by tests and CLI)."""
     payload = platform.dashboard()
+    stats = payload["stats"]
+    weak = platform.progress.weak_areas(limit=3)
+    weak_topics = chip_line((area.name for area in weak), empty="Take a practice test to reveal focus topics")
     return "\n\n".join(
         [
-            "## Your NEET preparation, made simple.\n"
-            "Learn a chapter, clear doubts, practice questions and revise weak topics.",
-            "### Quick actions\n\n" + actions_md(payload["actions"]),
-            student_profile_md(platform.progress),
-            "### Subject progress\n\n" + subject_cards_md(payload["subjects"]),
-            "### Mock test statistics\n\n" + mock_stats_md(payload["stats"]),
-            "### Weak areas\n\n" + weak_areas_md(platform.progress.weak_areas(limit=5)),
+            "## NEETra AI\nYour Personal NEET Doubt Solver, Practice Partner and Rank Improver",
+            "### Your progress\n\n"
+            + table(
+                ("Questions answered", "Practice attempted", "Accuracy", "Weak topics"),
+                [(stats["questions"], stats["tests"], pct(stats["accuracy"]), weak_topics)],
+            ),
+            "### Quick actions\n\n"
+            + "Ask a Doubt · Practice Tests · Revision Planner · Mock Tests · Progress Dashboard",
             recommended_topic_md(platform),
         ]
     )
@@ -226,55 +230,64 @@ def dashboard_markdown(platform: GeniePlatform) -> str:
 def build(gr: Any, platform: GeniePlatform, settings: Any, nav: Any | None = None) -> dict[str, Any]:
     """Create the landing dashboard and return refs for its study shortcuts."""
     payload = platform.dashboard()
+    stats = payload["stats"]
+    weak_areas = platform.progress.weak_areas(limit=5)
 
     with gr.Column(elem_classes=["genie-hero"]):
         gr.Markdown(
-            "## Study smarter. Clear every doubt.\n"
-            "Your personal NEET study companion for learning, practice, revision and progress."
+            "## Your Personal NEET Doubt Solver, Practice Partner and Rank Improver"
         )
-        gr.Markdown("**New here? Start with Ask a Doubt or choose a chapter in Learn.**")
-    with gr.Row(elem_classes=["genie-actions"]):
-        ask_btn = gr.Button("✅ Ask a Doubt", variant="primary")
-        practice_btn = gr.Button("✅ Start Practice")
-        revise_btn = gr.Button("✅ Quick Revision")
-        mock_btn = gr.Button("✅ Mock Test")
-    guidance_md = gr.Markdown(
-        "**How to study:** Learn a topic → ask doubts → practice MCQs → revise weak areas."
-    )
-
-    with gr.Row():
-        with gr.Column(scale=2, elem_classes=["genie-main-card"]):
-            subjects_md = gr.Markdown("### 📚 Subject Progress\n\n" + subject_cards_md(payload["subjects"]))
-            stats_widget = gr.Markdown("### 📝 Mock Test Statistics\n\n" + mock_stats_md(payload["stats"]))
-            weak_widget = gr.Markdown(
-                "### 🧠 Weak Areas\n\n"
-                + weak_areas_md(
-                    platform.progress.weak_areas(limit=5),
-                    empty_hint="_Take your first practice test to discover topics that need more revision._",
+    gr.Markdown("### Quick actions")
+    with gr.Row(elem_classes=["genie-dashboard-actions"]):
+        action_cards: dict[str, Any] = {}
+        for key, title, description in (
+            ("ask_doubt", "💬 Ask a Doubt", "Get a clear, NEET-focused explanation."),
+            ("practice_tests", "🎯 Practice Tests", "Build confidence with focused questions."),
+            ("revision_planner", "🔄 Revision Planner", "Create a revision sheet or review weak topics."),
+            ("mock_tests", "📝 Mock Tests", "Attempt a timed-style practice set."),
+            ("progress_dashboard", "📈 Progress Dashboard", "Review accuracy, activity and focus areas."),
+        ):
+            with gr.Column(elem_classes=["genie-action-card"]):
+                action_cards[key] = gr.Button(
+                    title,
+                    variant="primary" if key == "ask_doubt" else "secondary",
                 )
-            )
-            recommendation_widget = gr.Markdown(recommended_topic_md(platform))
-        with gr.Column(scale=1, elem_classes=["genie-profile-card"]):
-            profile_widget = gr.Markdown(student_profile_md(platform.progress))
-            gr.Markdown("### 🌟 Today’s Motivation")
-            motivation_md = gr.Markdown(f"> {esc(payload['motivation']['line'])}")
-            refresh_btn = gr.Button("Refresh dashboard", size="sm")
+                gr.Markdown(description)
 
-    buttons = {
-        "ask_doubt": ask_btn,
-        "practice_mcqs": practice_btn,
-        "quick_revision": revise_btn,
-        "mock_test": mock_btn,
-    }
+    stats_widget = gr.Markdown(
+        "### Your progress\n\n"
+        + table(
+            ("Questions answered", "Practice attempted", "Accuracy", "Weak topics"),
+            [
+                (
+                    stats["questions"],
+                    stats["tests"],
+                    pct(stats["accuracy"]),
+                    chip_line(
+                        (area.name for area in weak_areas),
+                        empty="Take a practice test to reveal focus topics",
+                    ),
+                )
+            ],
+        ),
+        elem_classes=["genie-main-card"],
+    )
+    weak_widget = gr.Markdown(
+        "### Focus topics\n\n"
+        + weak_areas_md(
+            weak_areas,
+            empty_hint="_Your focus topics will appear after your first practice test._",
+        )
+    )
+    recommendation_widget = gr.Markdown(recommended_topic_md(platform))
+    guidance_md = gr.Markdown()
+    refresh_btn = gr.Button("Refresh dashboard", size="sm")
     return {
         "stats": stats_widget,
-        "subjects": subjects_md,
         "weak": weak_widget,
         "recommendation": recommendation_widget,
-        "profile": profile_widget,
-        "motivation": motivation_md,
         "guidance": guidance_md,
-        "buttons": buttons,
+        "buttons": action_cards,
         "refresh": refresh_btn,
         "nav": nav,
     }
@@ -299,13 +312,35 @@ def wire(
         "ask_message": refs.get("ask_message"),
         "practice_scope": refs.get("practice_scope"),
     }
+    action_map = {
+        "ask_doubt": ("ask_doubt", "ask-genie"),
+        "practice_tests": ("practice_mcqs", "practice"),
+        "revision_planner": (None, "revision"),
+        "mock_tests": ("mock_test", "practice"),
+        "progress_dashboard": (None, "progress"),
+    }
     for key, button in dashboard_refs["buttons"].items():
-        names = tuple(name for name in _ACTION_TARGETS[key] if targets.get(name) is not None)
+        action_key, target_tab = action_map[key]
+        action_names = _ACTION_TARGETS.get(action_key or "", ())
+        names = tuple(name for name in action_names if targets.get(name) is not None)
         outputs = [dashboard_refs["guidance"]] + [targets[name] for name in names] + nav.outputs
 
-        def handler(action_key: str = key, wanted: tuple[str, ...] = names) -> list[Any]:
-            plan = quick_action_plan(platform, action_key)
-            values: list[Any] = [plan["markdown"]]
+        def handler(
+            selected_action: str | None = action_key,
+            wanted: tuple[str, ...] = names,
+            destination: str = target_tab,
+        ) -> list[Any]:
+            if selected_action:
+                plan = quick_action_plan(platform, selected_action)
+                guidance = plan["markdown"]
+            else:
+                guidance = (
+                    "**Opening the Revision Hub.** Choose a sheet type and topic to get started."
+                    if destination == "revision"
+                    else "**Opening Progress.** Review your practice history and accuracy."
+                )
+                plan = {"value": None, "seed": None}
+            values: list[Any] = [guidance]
             for name in wanted:
                 if name == "ask_mode":
                     values.append(gr.update(value=plan["value"]))
@@ -313,27 +348,45 @@ def wire(
                     values.append(gr.update(value=plan["seed"]))
                 elif name == "practice_scope":
                     values.append(gr.update(value=plan["value"]))
-            return values + nav.tail(plan["tab"])
+            return values + nav.tail(destination)
 
         button.click(handler, inputs=None, outputs=outputs, queue=False)
 
     def refresh() -> list[Any]:
         payload = platform.dashboard()
+        weak = platform.progress.weak_areas(limit=5)
+        current_stats = payload["stats"]
         return [
-            "### 📝 Mock Test Statistics\n\n" + mock_stats_md(payload["stats"]),
-            "### 📚 Subject Progress\n\n" + subject_cards_md(payload["subjects"]),
-            "### 🧠 Weak Areas\n\n" + weak_areas_md(platform.progress.weak_areas(limit=5)),
+            "### Your progress\n\n"
+            + table(
+                ("Questions answered", "Practice attempted", "Accuracy", "Weak topics"),
+                [
+                    (
+                        current_stats["questions"],
+                        current_stats["tests"],
+                        pct(current_stats["accuracy"]),
+                        chip_line(
+                            (area.name for area in weak),
+                            empty="Take a practice test to reveal focus topics",
+                        ),
+                    )
+                ],
+            ),
+            "### Focus topics\n\n"
+            + weak_areas_md(
+                weak,
+                empty_hint="_Your focus topics will appear after your first practice test._",
+            ),
             recommended_topic_md(platform),
-            student_profile_md(platform.progress),
-            f"> {esc(payload['motivation']['line'])}",
         ]
 
     dashboard_refs["refresh"].click(
         refresh,
         inputs=None,
         outputs=[
-            dashboard_refs["stats"], dashboard_refs["subjects"], dashboard_refs["weak"],
-            dashboard_refs["recommendation"], dashboard_refs["profile"], dashboard_refs["motivation"],
+            dashboard_refs["stats"],
+            dashboard_refs["weak"],
+            dashboard_refs["recommendation"],
         ],
         queue=False,
     )

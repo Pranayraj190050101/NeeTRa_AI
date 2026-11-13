@@ -93,7 +93,7 @@ def test_platform_status_describes_the_modules_and_hooks(platform: GeniePlatform
     assert {item["value"] for item in status["revision"]} == {item.value for item in RevisionDeliverable}
     assert "VoiceTranscriber.transcribe -> GeniePlatform.ask" in status["extension_hooks"]
     note = platform.health_note()
-    assert "3 chapter(s)" in note and "4 capability hook(s)" in note
+    assert "3 chapter(s)" in note and "3 capability hook(s)" in note
 
 
 # ------------------------------------------------------------------ dashboard
@@ -102,7 +102,7 @@ def test_dashboard_payload_has_every_section_the_tab_renders(platform: GeniePlat
     assert set(payload) == {"welcome", "motivation", "stats", "subjects", "actions", "capabilities"}
     assert payload["welcome"]["chapters"] == 3
     assert payload["welcome"]["modules"] == [
-        "Dashboard", "Learn", "Practice", "Ask Genie", "Progress", "Revision Hub"
+        "Ask Genie", "Practice", "Progress", "Revision Hub", "Dashboard"
     ]
     assert payload["stats"]["tests"] == 0
     assert payload["motivation"]["line"]
@@ -294,16 +294,17 @@ def test_ask_without_a_coach_pipeline_is_an_explicit_error(settings, vector_stor
 
 
 # ------------------------------------------------------ extension points
-def test_voice_and_image_seams_exist_but_are_not_implemented(platform: GeniePlatform) -> None:
+def test_photo_ocr_is_available_while_voice_remains_planned(platform: GeniePlatform) -> None:
     voice = platform.capability("voice")
     image = platform.capability("image")
-    assert voice.state is CapabilityState.PLANNED and image.state is CapabilityState.PLANNED
+    assert voice.state is CapabilityState.PLANNED
+    assert image.available
     with pytest.raises(CapabilityNotAvailable) as raised:
         platform.listen(b"\x00\x01fake wav")
     assert "Voice doubts" in raised.value.user_message()
     assert "VoiceTranscriber.transcribe" in raised.value.user_message()
-    with pytest.raises(CapabilityNotAvailable):
-        platform.solve_photo(b"fake png")
+    with pytest.raises(ValueError, match="empty"):
+        platform.extract_photo_question(b"")
 
 
 def test_registering_a_backend_routes_the_input_through_the_same_funnel(

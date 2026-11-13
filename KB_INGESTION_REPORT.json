@@ -1,150 +1,67 @@
 {
-  "files": 20,
-  "pages": 259,
-  "chunks": 780,
-  "added": 780,
+  "files": 3,
+  "pages": 538,
+  "chunks": 1620,
+  "added": 1620,
   "skipped": 0,
   "subjects": {
-    "biology": 780
+    "biology": 957,
+    "chemistry": 335,
+    "physics": 328
   },
-  "chapters": 19,
-  "chapter_list": [
+  "chapters": 0,
+  "chapter_list": [],
+  "failures": [
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "The Living World",
-      "file": "kebo101.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 77",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "2.1 Kingdom Monera",
-      "file": "kebo102.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 79",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "3.1 Algae",
-      "file": "kebo103.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 82",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "4.1 Basis of",
-      "file": "kebo104.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 83",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "Morphology of",
-      "file": "kebo105.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 85",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "6.1 The Tissue",
-      "file": "kebo106.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 86",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "7.1 Organ and Organ",
-      "file": "kebo107.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 92",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "Cell: The Unit of Life",
-      "file": "kebo108.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 97",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "9.1 How to Analyse",
-      "file": "kebo109.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 98",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "10.1 Cell Cycle",
-      "file": "kebo110.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 99",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "Photosynthesis in Higher",
-      "file": "kebo111.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 103",
+      "error": "OCR produced insufficient text for indexing"
     },
     {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "12.1 Do Plants",
-      "file": "kebo112.pdf"
-    },
-    {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "13.1 Growth",
-      "file": "kebo113.pdf"
-    },
-    {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "Breathing and Exchange",
-      "file": "kebo114.pdf"
-    },
-    {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "15.1 Blood",
-      "file": "kebo115.pdf"
-    },
-    {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "16.1 Human",
-      "file": "kebo116.pdf"
-    },
-    {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "17.1 Types of",
-      "file": "kebo117.pdf"
-    },
-    {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "18.1 Neural System",
-      "file": "kebo118.pdf"
-    },
-    {
-      "subject": "Biology",
-      "class": "11",
-      "source": "NCERT",
-      "chapter": "19.1 Endocrine",
-      "file": "kebo119.pdf"
+      "file": "biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 104",
+      "error": "OCR produced insufficient text for indexing"
     }
   ],
-  "failures": [],
-  "duration_s": 354.53,
-  "index_dir": "F:\\Project\\neet_ai_tutor\\vectordb\\neet_index",
-  "rebuilt": true
+  "duration_s": 199.64,
+  "index_dir": "vectordb/neet_index",
+  "rebuilt": false
 }

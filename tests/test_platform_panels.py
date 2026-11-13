@@ -225,6 +225,10 @@ class Examples(Component):
     kind = "examples"
 
 
+class Image(Component):
+    kind = "image"
+
+
 class FakeGradio:
     """The slice of the ``gradio`` module the platform actually uses."""
 
@@ -243,6 +247,7 @@ class FakeGradio:
     Radio = Radio
     Slider = Slider
     Checkbox = Checkbox
+    Image = Image
     State = State
     Examples = Examples
 
@@ -363,34 +368,56 @@ def built(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> FakeGradio:
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
-def test_navigation_is_exactly_the_six_student_modules(built: FakeGradio) -> None:
+def test_navigation_is_exactly_the_five_student_modules(built: FakeGradio) -> None:
     assert built.labels() == [
-        "🏠 Dashboard",
-        "📚 Learn",
-        "🎯 Practice",
         "🤖 Ask Genie",
+        "🎯 Practice",
         "📈 Progress",
         "📝 Revision Hub",
+        "🏠 Dashboard",
     ]
-    assert built.tabs().props["selected"] == "dashboard"
+    assert built.tabs().props["selected"] == "ask-genie"
 
 
-def test_diagnostics_are_hidden_behind_developer_mode(built: FakeGradio) -> None:
-    toggle = built.by_label("Developer Mode")
-    assert toggle.value is False
-    panel = next(
-        node for node in built.created
-        if isinstance(node, Accordion) and (
-            node.props.get("label") == "Technical diagnostics"
-            or (node.args and node.args[0] == "Technical diagnostics")
-        )
+def test_student_layout_does_not_render_developer_controls(built: FakeGradio) -> None:
+    labels = [str(node.props.get("label") or node.props.get("value") or "") for node in built.created]
+    assert not any("Developer Mode" in label for label in labels)
+    assert not any("Technical diagnostics" in label for label in labels)
+
+
+def test_ask_genie_can_run_without_textbook_retrieval_when_fallback_is_enabled(
+    settings: Any,
+) -> None:
+    status = {
+        "checks": {
+            "llm": {"ready": True},
+            "retrieval": {"ready": False},
+        }
+    }
+    real_provider_settings = settings.model_copy(update={"llm_provider": "huggingface"})
+    assert app_module._ask_genie_available(status, real_provider_settings)
+    assert not app_module._ask_genie_available(
+        status, real_provider_settings.model_copy(update={"allow_general_fallback": False})
     )
-    assert panel.props["visible"] is False
-    assert built.event_for("Developer Mode", "change").call(True)["visible"] is True
+    assert not app_module._ask_genie_available(status, settings)
+
+
+def test_mock_provider_disables_student_answers_with_a_clear_message(settings: Any) -> None:
+    status = {
+        "checks": {
+            "llm": {"ready": True},
+            "retrieval": {"ready": True},
+        },
+        "student_message": "You're all set.",
+    }
+
+    assert not app_module._ask_genie_available(status, settings)
+    assert "answers are unavailable" in app_module._ask_genie_status_message(status, settings)
 
 
 def test_module_tabs_carry_the_ids_the_shortcuts_jump_to(built: FakeGradio) -> None:
     ids = {child.props.get("label"): child.props.get("id") for child in built.tabs().find("tab")}
+    assert sum(isinstance(node, Tabs) for node in built.created) == 1
     assert ids["🏠 Dashboard"] == "dashboard"
     assert ids["🤖 Ask Genie"] == "ask-genie"
     assert ids["📝 Revision Hub"] == "revision"
@@ -406,11 +433,19 @@ def test_ask_genie_has_simple_student_controls_and_suggestions(built: FakeGradio
     assert [value for _, value in modes.props["choices"]] == [mode.value for mode in AnswerMode]
     assert ask_tab.find("textbox")
     assert not ask_tab.find("slider"), "technical retrieval controls stay out of the student UI"
-    assert ask_tab.find("examples")
+    assert not ask_tab.find("examples")
+    for label in (
+        "Explain Cell Cycle",
+        "Explain Photoelectric Effect",
+        "10 MCQs: Thermodynamics",
+        "Revise Molecular Basis of Inheritance",
+    ):
+        assert built.by_label(label)
     text = "\n".join(node.props.get("value") or "" for node in ask_tab.find("markdown"))
-    assert "✅ **Knowledge Base Ready**" in text
-    assert "✅ **LLM Ready**" in text
-    assert "✅ **Retrieval Ready**" in text
+    assert "Knowledge Base Ready" not in text
+    assert "LLM Ready" not in text
+    assert "Retrieval Ready" not in text
+    assert "You're all set." not in text
     assert "Student Profile" in text
 
 
@@ -419,6 +454,32 @@ def test_ask_genie_send_handler_uses_only_student_inputs(built: FakeGradio) -> N
     assert len(event.inputs) == 4, "message, chat, subject and answer style"
     assert [node.kind for node in event.outputs] == ["chatbot", "markdown", "markdown"]
     assert inspect.isgeneratorfunction(event.fn), "streaming must stay a generator"
+
+
+def test_ask_genie_photo_upload_prefills_editable_question_without_sending(
+    built: FakeGradio, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    assert any(
+        node.kind == "accordion" and node.args[0] == "📷 Ask with a photo"
+        for node in built.created
+    )
+    assert built.by_label("Upload your question photo").kind == "image"
+
+    image_path = tmp_path / "doubt.png"
+    image_path.write_bytes(b"uploaded image")
+    monkeypatch.setattr(
+        GeniePlatform,
+        "extract_photo_question",
+        lambda _self, _image, *, subject=None: "Find the acceleration of the body.",
+    )
+
+    event = built.event_for("Read uploaded photo")
+    text, status = event.call(str(image_path), "physics")
+
+    assert text == "Find the acceleration of the body."
+    assert "Review or edit" in status
+    assert [component.kind for component in event.outputs] == ["textbox", "markdown"]
+    assert event.component is not built.by_label("Send to Genie")
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +514,7 @@ def test_tabnav_understands_the_injected_build(built: FakeGradio) -> None:
 # Dashboard shortcuts
 # ---------------------------------------------------------------------------
 def test_dashboard_practice_shortcut_configures_and_jumps(built: FakeGradio, stub: StubTutor) -> None:
-    event = built.event_for("✅ Start Practice")
+    event = built.event_for("🎯 Practice Tests")
     guidance, scope_update, tabs_update = event.call()
     assert "Practice" in guidance
     assert scope_update["value"] == "chapter"
@@ -461,7 +522,7 @@ def test_dashboard_practice_shortcut_configures_and_jumps(built: FakeGradio, stu
 
 
 def test_dashboard_ask_shortcut_drafts_into_the_chat_box(built: FakeGradio, stub: StubTutor) -> None:
-    event = built.event_for("✅ Ask a Doubt")
+    event = built.event_for("💬 Ask a Doubt")
     guidance, mode_update, message_update, tabs_update = event.call()
     assert "Ask Genie" in guidance
     assert mode_update["value"] == AnswerMode.DETAILED.value
@@ -472,44 +533,62 @@ def test_dashboard_ask_shortcut_drafts_into_the_chat_box(built: FakeGradio, stub
 def test_dashboard_refresh_recounts_from_the_store(built: FakeGradio, stub: StubTutor) -> None:
     outputs = built.event_for("Refresh dashboard").outputs
     values = built.event_for("Refresh dashboard").call()
-    assert len(values) == len(outputs) == 6
-    assert "Mock Test Statistics" in values[0]
+    assert len(values) == len(outputs) == 3
+    assert "Questions answered" in values[0]
+    assert "Focus topics" in values[1]
+
+
+def test_dashboard_revision_and_progress_cards_open_the_right_tabs(built: FakeGradio) -> None:
+    _guidance, revision_tabs = built.event_for("🔄 Revision Planner").call()
+    _progress_guidance, progress_tabs = built.event_for("📈 Progress Dashboard").call()
+    assert revision_tabs.props["selected"] == "revision"
+    assert progress_tabs.props["selected"] == "progress"
 
 
 # ---------------------------------------------------------------------------
 # Learn
 # ---------------------------------------------------------------------------
-def test_learn_tab_offers_the_indexed_chapters(built: FakeGradio) -> None:
-    learn_tab = next(child for child in built.tabs().find("tab") if child.props.get("label") == "📚 Learn")
+def test_learn_tab_offers_the_indexed_chapters(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
+    settings = settings.model_copy(update={"learn_enabled": True})
+    app_module.build_app(settings, tutor=stub)
+    learn_tab = next(child for child in fake_gr.tabs().find("tab") if child.props.get("label") == "📚 Learn")
     dropdowns = learn_tab.find("dropdown")
     subjects, chapters = dropdowns[0], dropdowns[1]
     assert [value for _, value in subjects.props["choices"]][:3] == ["physics", "chemistry", "biology"]
     assert "Mechanics" in [name for _, name in chapters.props["choices"]]
 
 
-def test_learn_generate_builds_the_four_section_page(built: FakeGradio, stub: StubTutor) -> None:
-    page, status, citations = built.call("Generate study page", "physics", "Mechanics", "")
+def test_learn_generate_builds_the_four_section_page(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
+    settings = settings.model_copy(update={"learn_enabled": True})
+    app_module.build_app(settings, tutor=stub)
+    page, status, citations = fake_gr.call("Generate study page", "physics", "Mechanics", "")
     for heading in ("Summary", "High-Yield Concepts", "Important NEET Points", "Quick Revision Notes"):
         assert heading in page, f"missing section {heading}"
     assert "Status" in status
     assert citations
 
 
-def test_learn_topic_box_works_without_a_chapter(built: FakeGradio, stub: StubTutor) -> None:
-    page, _status, _citations = built.call("Generate study page", "physics", "", "photoelectric effect")
+def test_learn_topic_box_works_without_a_chapter(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
+    settings = settings.model_copy(update={"learn_enabled": True})
+    app_module.build_app(settings, tutor=stub)
+    page, _status, _citations = fake_gr.call("Generate study page", "physics", "", "photoelectric effect")
     assert "Mock study material" in page or "High-Yield" in page
 
 
-def test_learn_ask_button_prefills_the_coach(built: FakeGradio, stub: StubTutor) -> None:
-    preview, message_update, mode_update, tabs_update = built.call("Ask Genie about this chapter", "Mechanics", "")
+def test_learn_ask_button_prefills_the_coach(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
+    settings = settings.model_copy(update={"learn_enabled": True})
+    app_module.build_app(settings, tutor=stub)
+    preview, message_update, mode_update, tabs_update = fake_gr.call("Ask Genie about this chapter", "Mechanics", "")
     assert "Drafted for Ask Genie" in preview
     assert "Mechanics" in message_update["value"]
     assert mode_update["value"] == "detailed"
     assert tabs_update.props["selected"] == "ask-genie"
 
 
-def test_learn_refresh_rebuilds_the_choices(built: FakeGradio, stub: StubTutor) -> None:
-    subjects, chapters, intro = built.call("Refresh chapters")
+def test_learn_refresh_rebuilds_the_choices(fake_gr: FakeGradio, settings: Any, stub: StubTutor) -> None:
+    settings = settings.model_copy(update={"learn_enabled": True})
+    app_module.build_app(settings, tutor=stub)
+    subjects, chapters, intro = fake_gr.call("Refresh chapters")
     assert subjects["choices"]
     assert "chapters" in intro.lower() or "index" in intro.lower()
     assert chapters["choices"] or chapters["value"] is None
@@ -629,26 +708,12 @@ def test_revision_can_draft_a_doubt_for_the_coach(built: FakeGradio, stub: StubT
 # ---------------------------------------------------------------------------
 # Cross-cutting
 # ---------------------------------------------------------------------------
-def test_developer_mode_contains_the_technical_diagnostics(built: FakeGradio) -> None:
-    panel = next(
-        node for node in built.created
-        if isinstance(node, Accordion) and (
-            node.props.get("label") == "Technical diagnostics"
-            or (node.args and node.args[0] == "Technical diagnostics")
-        )
-    )
-    joined = "\n".join(node.props.get("value") or "" for node in panel.find("markdown"))
-    assert "GeniePlatform" in joined
-    assert "Agent graph" in joined
-    assert "Embeddings" in joined
-
-
 def test_app_uses_verified_readiness_without_loading_a_model_during_layout(
     fake_gr: FakeGradio, settings: Any, stub: StubTutor
 ) -> None:
     app_module.build_app(settings, tutor=stub)
     blocks = next(node for node in fake_gr.created if isinstance(node, Blocks))
-    assert blocks.props["title"] == "🧞 NEET Genie"
+    assert blocks.props["title"] == "NEETra AI"
     assert stub.platform_calls >= 1
 
 
@@ -659,7 +724,7 @@ def test_the_layout_is_rebuilt_on_a_second_call(fake_gr: FakeGradio, settings: A
     app_module.build_app(settings, tutor=stub)
     assert len(fake_gr.created) > first
     assert fake_gr.labels() == [
-        "🏠 Dashboard", "📚 Learn", "🎯 Practice", "🤖 Ask Genie", "📈 Progress", "📝 Revision Hub"
+        "🤖 Ask Genie", "🎯 Practice", "📈 Progress", "📝 Revision Hub", "🏠 Dashboard"
     ]
 
 

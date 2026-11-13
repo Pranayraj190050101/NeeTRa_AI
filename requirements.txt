@@ -42,6 +42,7 @@ groq>=0.11.0,<1.0
 
 # --- Document ingestion ----------------------------------------------------
 pypdf>=5.0.0,<7.0
+rapidocr-onnxruntime>=1.4,<2.0
 
 # --- Configuration / utilities --------------------------------------------
 pydantic>=2.7.0,<3.0

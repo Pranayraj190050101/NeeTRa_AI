@@ -1,46 +1,39 @@
-# NCERT Ingestion Report
+# NEETra AI Knowledge Base Ingestion Report
 
-Generated: 2026-10-29 15:11:58
-Mode: **rebuild**  
-Index: `F:\Project\neet_ai_tutor\vectordb\neet_index`
+Generated: 2026-11-13 11:55:44
+Mode: **append**
+Index: `vectordb/neet_index`
 
 ## Summary
 
 | Metric | Value |
 |---|---|
-| Files processed | 20 |
-| Pages parsed | 259 |
-| Chunks created | 780 |
-| Chunks added | 780 |
+| Files processed | 3 |
+| Pages parsed | 538 |
+| Chunks created | 1620 |
+| Chunks added | 1620 |
 | Duplicates skipped | 0 |
-| Chapters found | 19 |
-| Failures | 0 |
-| Duration | 5 m 54 s |
+| Chapters found | 0 |
+| Failures | 12 |
+| Duration | 3 m 19 s |
 
 ## Chapters
 
-| Subject | Class | Chapter | File |
-|---|---|---|---|
-| Biology | 11 | The Living World | `kebo101.pdf` |
-| Biology | 11 | 2.1 Kingdom Monera | `kebo102.pdf` |
-| Biology | 11 | 3.1 Algae | `kebo103.pdf` |
-| Biology | 11 | 4.1 Basis of | `kebo104.pdf` |
-| Biology | 11 | Morphology of | `kebo105.pdf` |
-| Biology | 11 | 6.1 The Tissue | `kebo106.pdf` |
-| Biology | 11 | 7.1 Organ and Organ | `kebo107.pdf` |
-| Biology | 11 | Cell: The Unit of Life | `kebo108.pdf` |
-| Biology | 11 | 9.1 How to Analyse | `kebo109.pdf` |
-| Biology | 11 | 10.1 Cell Cycle | `kebo110.pdf` |
-| Biology | 11 | Photosynthesis in Higher | `kebo111.pdf` |
-| Biology | 11 | 12.1 Do Plants | `kebo112.pdf` |
-| Biology | 11 | 13.1 Growth | `kebo113.pdf` |
-| Biology | 11 | Breathing and Exchange | `kebo114.pdf` |
-| Biology | 11 | 15.1 Blood | `kebo115.pdf` |
-| Biology | 11 | 16.1 Human | `kebo116.pdf` |
-| Biology | 11 | 17.1 Types of | `kebo117.pdf` |
-| Biology | 11 | 18.1 Neural System | `kebo118.pdf` |
-| Biology | 11 | 19.1 Endocrine | `kebo119.pdf` |
+_No chapter metadata was recorded for this corpus._
 
 ## Failures
 
-_None - every file ingested cleanly._
+| File | Error |
+|---|---|
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 77` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 79` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 82` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 83` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 85` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 86` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 92` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 97` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 98` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 99` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 103` | OCR produced insufficient text for indexing |
+| `biology/PW_NEET_39_YEARS_BIOLOGY_PYQ.pdf page 104` | OCR produced insufficient text for indexing |

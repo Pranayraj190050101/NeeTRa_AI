@@ -108,10 +108,10 @@ class IngestionReport:
     def markdown(self) -> str:
         """Render the ingestion report as Markdown (files/chapters/chunks/failures)."""
         lines = [
-            "# NCERT Ingestion Report",
+            "# NEETra AI Knowledge Base Ingestion Report",
             "",
             f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}",
-            f"Mode: **{'rebuild' if self.rebuilt else 'append'}**  ",
+            f"Mode: **{'rebuild' if self.rebuilt else 'append'}**",
             f"Index: `{self.index_dir}`",
             "",
             "## Summary",
@@ -138,7 +138,7 @@ class IngestionReport:
                     f"{chapter['chapter']} | `{chapter['file']}` |"
                 )
         else:
-            lines.append("_No NCERT chapters were recognised in this corpus._")
+            lines.append("_No chapter metadata was recorded for this corpus._")
         lines += ["", "## Failures", ""]
         if self.failures:
             lines += ["| File | Error |", "|---|---|"]
@@ -146,7 +146,7 @@ class IngestionReport:
                 error = str(failure.get("error", "")).replace("|", "\\|").replace("\n", " ")
                 lines.append(f"| `{failure.get('file', '')}` | {error} |")
         else:
-            lines.append("_None - every file ingested cleanly._")
+            lines.append("_No OCR or ingestion issues were recorded._")
         lines.append("")
         return "\n".join(lines)
 

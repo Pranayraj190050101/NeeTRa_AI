@@ -1,4 +1,4 @@
-"""NEET Genie - a student-first NEET learning application.
+"""NEETra AI - a student-first NEET learning application.
 
 Run::
 
@@ -6,11 +6,9 @@ Run::
     python app.py --check              # run startup diagnostics and exit
     python app.py --ingest             # build the NCERT study library
 
-The student interface has exactly six modules: Dashboard, Learn, Practice,
-Ask Genie, Progress and Revision Hub.  Provider, retrieval and implementation
-diagnostics are hidden behind Developer Mode.  Startup performs a real answer
-and textbook-search probe before enabling the doubt box; a failed dependency or
-provider never appears as a ready tutor.
+The student interface focuses on Ask Genie, Practice, Progress, Revision Hub
+and Dashboard. Learn remains opt-in for compatibility. Startup verifies the
+answer provider and textbook search before presenting the Ask Genie status.
 """
 
 from __future__ import annotations
@@ -50,12 +48,6 @@ from ui import revision as revision_ui  # noqa: E402
 logger = get_logger(__name__)
 
 STREAM_THROTTLE_S: float = 0.06
-
-EXAMPLES: list[list[str]] = [
-    ["Explain Photoelectric Effect"],
-    ["Generate 10 MCQs from Thermodynamics"],
-    ["Give quick revision notes for Cell Cycle"],
-]
 
 CSS = """
 :root {--genie-primary: #5b4bdb; --genie-ink: #17233c; --genie-muted: #64748b;}
@@ -215,14 +207,12 @@ def platform_panel(platform: Any) -> str:
         f"- Tests stored: **{progress.get('tests', 0)}** · questions answered: "
         f"{progress.get('questions', 0)} · doubts asked: {progress.get('doubts', 0)}\n"
         f"- Revision deliverables: {sheets}\n\n"
-        "### Extension points (not implemented yet)\n\n"
-        "Voice and photo solving are registered capabilities with a typed "
-        "protocol each; both funnel into `GeniePlatform.ask()`, so they reuse "
-        "the coach pipeline as it is.\n\n"
+        "### Input channels\n\n"
+        "Ask Genie accepts typed questions and uploaded doubt photos. Photo text is "
+        "read locally and shown for review before the student sends it. Voice input "
+        "is still planned.\n\n"
         f"{describe_capabilities(platform.capabilities)}\n\n"
-        "_Registering a backend is one call - "
-        "`platform.capabilities.register('voice', my_transcriber)` - and the "
-        "Ask Genie tab's hint disappears on its own._"
+        "_Uploaded questions use the same answer and citation pipeline as typed questions._"
     )
 
 
@@ -238,20 +228,24 @@ def _mode_help(mode: AnswerMode) -> str:
     return f"{mode.emoji} **{mode.label}** — {mode.description}"
 
 
-def readiness_markdown(status: dict[str, Any]) -> str:
-    """The three startup promises a student can understand at a glance."""
-    names = (
-        ("knowledge_base", "Knowledge Base"),
-        ("llm", "LLM"),
-        ("retrieval", "Retrieval"),
-    )
+def _ask_genie_available(status: dict[str, Any], settings: Settings) -> bool:
+    """Allow student answers only when a real model provider is ready."""
     checks = status.get("checks") or {}
-    lines = []
-    for key, label in names:
-        ready = bool((checks.get(key) or {}).get("ready"))
-        lines.append(f"{'✅' if ready else '⚠️'} **{label} {'Ready' if ready else 'Needs Attention'}**")
-    lines.extend(["", str(status.get("student_message") or "Checking your study tools…")])
-    return "  \n".join(lines)
+    llm_ready = bool((checks.get("llm") or {}).get("ready"))
+    retrieval_ready = bool((checks.get("retrieval") or {}).get("ready"))
+    return (
+        settings.resolved_llm_provider != "mock"
+        and llm_ready
+        and (retrieval_ready or settings.allow_general_fallback)
+    )
+
+
+def _ask_genie_status_message(status: dict[str, Any], settings: Settings) -> str:
+    if settings.resolved_llm_provider == "mock":
+        return "Genie's AI service isn't connected yet, so answers are unavailable."
+    if _ask_genie_available(status, settings):
+        return "Ready for your doubt."
+    return str(status.get("student_message") or "Answers are paused until Genie reconnects.")
 
 
 def _student_progress(payload: dict[str, Any]) -> str:
@@ -316,6 +310,12 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
             logger.info("Question truncated to %d characters", settings.max_question_chars)
 
         answer_mode = AnswerMode.coerce(mode, default=settings.answer_mode)
+        logger.info(
+            "Ask Genie request started (mode=%s, subject=%s, chars=%d)",
+            answer_mode.value,
+            subject or "auto",
+            len(text),
+        )
         prior_turns = _history_for_model(history)
         history.append({"role": "user", "content": text})
 
@@ -391,6 +391,11 @@ def build_responder(tutor: NEETTutor, settings: Settings, on_result: Any = None)
             return
 
         sources = citations_to_markdown(result.citations)
+        logger.info(
+            "Ask Genie request completed (ok=%s, citations=%d)",
+            getattr(result, "ok", True),
+            len(result.citations),
+        )
         yield snapshot(result.answer), _completion_status(result, settings), sources
 
     return respond
@@ -408,7 +413,7 @@ def build_ask_genie_tab(
 ) -> dict[str, Any]:
     """A calm chat workspace with only student-relevant controls."""
     readiness = tutor.startup_status()
-    ready = bool(readiness["ready"])
+    ready = _ask_genie_available(readiness, settings)
 
     gr.Markdown(
         "## 🤖 Ask Genie\n"
@@ -417,9 +422,6 @@ def build_ask_genie_tab(
     )
     with gr.Row():
         with gr.Column(scale=3, elem_classes=["genie-chat-card"]):
-            readiness_box = gr.Markdown(
-                readiness_markdown(readiness), elem_classes=["genie-readiness"]
-            )
             chatbot = gr.Chatbot(
                 label="Chat with Genie",
                 type="messages",
@@ -438,16 +440,53 @@ def build_ask_genie_tab(
                 max_lines=5,
                 interactive=ready,
             )
+            with gr.Accordion("📷 Ask with a photo", open=False):
+                photo_box = gr.Image(
+                    type="filepath",
+                    sources=["upload"],
+                    label="Upload your question photo",
+                    show_download_button=False,
+                    height=240,
+                )
+                gr.Markdown(
+                    "Choose a clear, upright photo of your question. Review the extracted text for "
+                    "handwriting, equations, or diagram details before sending."
+                )
+                read_photo_btn = gr.Button("Read uploaded photo", size="sm")
             with gr.Row():
                 send_btn = gr.Button(
                     "Send to Genie", variant="primary", scale=3, interactive=ready
                 )
                 clear_btn = gr.ClearButton([chatbot], value="New chat", scale=1)
             status_box = gr.Markdown(
-                _status_line("Ready for your doubt." if ready else "Answers are paused until Genie reconnects."),
+                    _status_line(_ask_genie_status_message(readiness, settings)),
                 elem_id="neet-status",
             )
-            gr.Examples(examples=EXAMPLES, inputs=[message_box], label="Suggested questions")
+            gr.Markdown("**Try asking**", elem_classes=["genie-suggestion-label"])
+            with gr.Row(elem_classes=["genie-suggestions"]):
+                for label, prompt in (
+                    ("Explain Cell Cycle", "Explain the Cell Cycle and its key checkpoints."),
+                    ("Explain Photoelectric Effect", "Explain the photoelectric effect for NEET."),
+                    (
+                        "10 MCQs: Thermodynamics",
+                        "Generate 10 MCQs from Thermodynamics.",
+                    ),
+                    (
+                        "Revise Molecular Basis of Inheritance",
+                        "Give me quick revision notes for Molecular Basis of Inheritance.",
+                    ),
+                ):
+                    suggestion = gr.Button(
+                        label,
+                        size="sm",
+                        elem_classes=["genie-prompt-chip"],
+                    )
+                    suggestion.click(
+                        lambda value=prompt: gr.update(value=value),
+                        inputs=None,
+                        outputs=[message_box],
+                        queue=False,
+                    )
             with gr.Accordion("📖 Textbook references", open=False):
                 sources_box = gr.Markdown(
                     "_References appear here after Genie answers._",
@@ -490,6 +529,40 @@ def build_ask_genie_tab(
         outputs=[chatbot, status_box, sources_box],
     ).then(lambda: "", outputs=[message_box], queue=False)
 
+    def read_photo(image_path: str | None, subject: str) -> tuple[str, str]:
+        if not image_path:
+            return "", _status_line("Upload a photo first.")
+
+        path = Path(image_path)
+        if not path.is_file():
+            return "", _status_line("That photo is no longer available. Upload it again.")
+        if path.stat().st_size > 20 * 1024 * 1024:
+            return "", _status_line("This photo is too large. Choose an image under 20 MB.")
+
+        try:
+            question = platform.extract_photo_question(
+                path.read_bytes(),
+                subject=None if subject in (None, "", "auto", "general") else subject,
+            )
+        except Exception:
+            logger.exception("Could not read text from uploaded doubt photo")
+            return "", _status_line(
+                "We couldn't read this photo. Try a clearer image or type your question."
+            )
+        if not question.strip():
+            return "", _status_line(
+                "No readable question text was found. Try a clearer photo or type your question."
+            )
+        return question, _status_line(
+            "Text is ready. Review or edit your question above, then send it to Genie."
+        )
+
+    read_photo_btn.click(
+        read_photo,
+        inputs=[photo_box, subject_box],
+        outputs=[message_box, status_box],
+    )
+
     message_box.submit(
         responder,
         inputs=[message_box, chatbot, subject_box, mode_box],
@@ -504,10 +577,9 @@ def build_ask_genie_tab(
 
     def reconnect() -> list[Any]:
         status = tutor.validate_startup()
-        available = bool(status["ready"])
+        available = _ask_genie_available(status, settings)
         return [
-            readiness_markdown(status),
-            _status_line("Ready for your doubt." if available else status["student_message"]),
+            _status_line(_ask_genie_status_message(status, settings)),
             gr.update(interactive=available),
             gr.update(interactive=available),
         ]
@@ -515,7 +587,7 @@ def build_ask_genie_tab(
     reconnect_btn.click(
         reconnect,
         inputs=None,
-        outputs=[readiness_box, status_box, message_box, send_btn],
+        outputs=[status_box, message_box, send_btn],
     )
 
     return {
@@ -528,7 +600,6 @@ def build_ask_genie_tab(
         "subject": subject_box,
         "mode": mode_box,
         "mode_help": mode_md,
-        "readiness": readiness_box,
         "reconnect": reconnect_btn,
     }
 
@@ -537,7 +608,7 @@ def build_ask_genie_tab(
 # UI
 # ---------------------------------------------------------------------------
 def build_app(settings: Settings, tutor: NEETTutor | None = None) -> "gr.Blocks":
-    """Build the six-module student product and its hidden developer panel."""
+    """Build the student-facing product without exposing developer diagnostics."""
     gr = genie_ui.lazy_gradio()
     tutor = tutor or NEETTutor(settings)
     platform = tutor.platform()
@@ -550,59 +621,45 @@ def build_app(settings: Settings, tutor: NEETTutor | None = None) -> "gr.Blocks"
     nav = genie_ui.TabNav(gr)
 
     with gr.Blocks(
-        title="🧞 NEET Genie", theme=gr.themes.Soft(), css=CSS + genie_ui.PLATFORM_CSS
+        title="NEETra AI",
+        theme=gr.themes.Soft(),
+        css=CSS + genie_ui.PLATFORM_CSS,
+        analytics_enabled=False,
     ) as demo:
-        gr.Markdown("# 🧞 NEET Genie", elem_id="neet-header")
-        gr.Markdown("Every NEET Doubt. One Wish Away.", elem_id="neet-sub")
+        gr.Markdown("# NEETra AI", elem_id="neet-header")
 
-        with gr.Tabs(selected="dashboard") as tabs:
+        with gr.Tabs(selected="ask-genie") as tabs:
             nav.attach(tabs)
-            with nav.tab("🏠 Dashboard", "dashboard"):
-                dashboard_refs = dashboard_ui.build(gr, platform, settings, nav)
-            with nav.tab("📚 Learn", "learn"):
-                learn_refs = learn_ui.build(gr, platform, settings, nav, autowire=False)
-            with nav.tab("🎯 Practice", "practice"):
-                practice_refs = practice_ui.build(gr, platform, settings, nav)
             with nav.tab("🤖 Ask Genie", "ask-genie"):
                 genie_refs = build_ask_genie_tab(gr, settings, tutor, responder, platform)
+            with nav.tab("🎯 Practice", "practice"):
+                practice_refs = practice_ui.build(gr, platform, settings, nav)
             with nav.tab("📈 Progress", "progress"):
                 progress_ui.build(gr, platform, settings, nav)
             with nav.tab("📝 Revision Hub", "revision"):
                 revision_refs = revision_ui.build(gr, platform, settings, nav, autowire=False)
+            with nav.tab("🏠 Dashboard", "dashboard"):
+                dashboard_refs = dashboard_ui.build(gr, platform, settings, nav)
+            if settings.learn_enabled:
+                with nav.tab("📚 Learn", "learn"):
+                    learn_refs = learn_ui.build(gr, platform, settings, nav, autowire=False)
+
+        if settings.learn_enabled:
+            learn_ui.wire(
+                gr,
+                platform,
+                learn_refs,
+                nav=nav,
+                targets={"ask_message": genie_refs["message"], "ask_mode": genie_refs["mode"]},
+            )
 
         shared_targets = {
             "ask_mode": genie_refs["mode"],
             "ask_message": genie_refs["message"],
             "practice_scope": practice_refs["scope"],
         }
-        learn_ui.wire(gr, platform, learn_refs, nav=nav, targets=shared_targets)
         revision_ui.wire(gr, platform, revision_refs, nav=nav, targets=shared_targets)
         dashboard_ui.wire(gr, platform, shared_targets, nav, dashboard_refs)
-
-        developer_toggle = gr.Checkbox(
-            label="Developer Mode", value=False, elem_classes=["developer-toggle"]
-        )
-        with gr.Accordion("Technical diagnostics", open=False, visible=False) as developer_panel:
-            gr.Markdown(index_panel(tutor) + "\n\n" + settings_panel(settings, tutor))
-            gr.Markdown(coach_panel(settings))
-            gr.Markdown(architecture_panel(tutor))
-            gr.Markdown(platform_panel(platform))
-            health_box = gr.Markdown(
-                "```json\n" + json.dumps(tutor.health(), indent=2, default=str) + "\n```"
-            )
-            refresh_diagnostics = gr.Button("Refresh diagnostics", size="sm")
-            refresh_diagnostics.click(
-                lambda: "```json\n" + json.dumps(tutor.health(), indent=2, default=str) + "\n```",
-                inputs=None,
-                outputs=[health_box],
-                queue=False,
-            )
-        developer_toggle.change(
-            lambda enabled: gr.update(visible=bool(enabled)),
-            inputs=[developer_toggle],
-            outputs=[developer_panel],
-            queue=False,
-        )
 
     demo.queue(default_concurrency_limit=1)
     return demo
@@ -613,7 +670,7 @@ def build_app(settings: Settings, tutor: NEETTutor | None = None) -> "gr.Blocks"
 # ---------------------------------------------------------------------------
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run NEET Genie - Dashboard, Learn, Practice, Ask Genie, Progress and Revision Hub."
+        description="Run NEETra AI - Ask Genie, Practice, Progress, Revision Hub and Dashboard."
     )
     parser.add_argument("--host", default=None, help="Bind address (default: NEET_GRADIO_SERVER_NAME).")
     parser.add_argument("--port", type=int, default=None, help="Port (default: NEET_GRADIO_SERVER_PORT).")
@@ -768,8 +825,12 @@ def main(argv: list[str] | None = None) -> int:
 
     tutor = NEETTutor(settings)
     readiness = tutor.validate_startup()
-    if readiness["ready"]:
+    if readiness["ready"] and settings.resolved_llm_provider != "mock":
         logger.info("Startup verified: knowledge base, LLM and retrieval are ready")
+    elif settings.resolved_llm_provider == "mock":
+        logger.warning(
+            "The offline mock provider is active; Ask Genie is disabled until a real model is configured"
+        )
     else:
         # The learning shell can still show progress, but Ask Genie remains gated.
         logger.error("Startup readiness failed: %s", readiness["errors"])
@@ -780,7 +841,8 @@ def main(argv: list[str] | None = None) -> int:
         server_port=args.port or settings.gradio_server_port,
         share=bool(args.share or settings.gradio_share),
         inbrowser=False,
-        show_error=True,
+        show_error=False,
+        show_api=False,
     )
     return 0
 

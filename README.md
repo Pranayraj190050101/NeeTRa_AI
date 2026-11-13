@@ -10,7 +10,9 @@ token by token into a Gradio UI. Around the chat sit a Practice engine, a Progre
 Hub and a Dashboard; the optional **Learn** library (chapter study pages) ships behind the
 `NEETRA_ENABLE_LEARN` feature flag. Everything is preserved and stays one environment variable away.
 
-Everything runs locally and open-source: no paid API, no data leaving the machine.
+The app and retrieval index run locally. The default offline mock provider returns placeholders;
+configure Hugging Face for local model answers or Groq for hosted answers. A hosted provider receives
+the prompts sent to it.
 
 ```text
 User Question  (+ the Answer mode chosen in the sidebar)
@@ -40,23 +42,22 @@ retrieval + answer path, so nothing had to be removed or rewritten to add them.
 
 ## The assistant: Ask Genie first
 
-`python app.py` opens the preparation modules, in this order, plus the three diagnostic tabs
-(Knowledge base / Coach / Architecture) that were already there:
+`python app.py` opens the student modules in this order:
 
 | Tab | What a student does | Service layer | UI module |
 | --- | --- | --- | --- |
 | **Ask Genie** | the primary module - the coach chat: type any doubt and get a grounded answer with citations, same widgets, same four answer modes, same streaming | `agents/tutor.py` | `app.py::build_ask_genie_tab` |
-| **Dashboard** | sees a welcome, one line of daily motivation, live study statistics, the three subject cards (Physics / Chemistry / Biology) and four quick actions - Ask Doubt, Practice MCQs, Quick Revision, Start Mock Test - each of which jumps to the tab that can do it | `learning/service.py` (`dashboard()`) | `ui/dashboard.py` |
 | **Practice** | takes a Subject, Chapter or Topic test, answers the MCQs, submits, and gets Score / Accuracy / Weak Topics with the correct answer and explanation for every question | `learning/practice.py` + `learning.assessment.py` | `ui/practice.py` |
 | **Progress** | reviews tests attempted, scores, accuracy, per-subject and per-chapter performance, ranked weak areas and a two-week daily series | `learning/progress.py` | `ui/progress.py` |
 | **Revision Hub** | generates Flash Notes, a Formula Sheet, High-Yield Points or Last-Minute Revision Notes for any chapter, plus a *Revise my weak areas* pass | `learning/revision.py` | `ui/revision.py` |
-| **Learn** *(optional)* | picks subject -> chapter and gets the four-section study page (📘 Chapter Summary / 🎯 High-Yield Concepts / 📝 Important NEET Points / ⚡ Quick Revision Notes) built from retrieved pages - shown only when `NEETRA_ENABLE_LEARN` is on | `learning/learn.py` + `learning/catalog.py` | `ui/learn.py` |
+| **Dashboard** | compact product landing page with five shortcuts (Ask a Doubt, Practice Tests, Revision Planner, Mock Tests, Progress Dashboard) plus questions answered, practice attempts, accuracy and weak topics | `learning/service.py` (`dashboard()`) | `ui/dashboard.py` |
+| **Learn** *(optional; off by default)* | picks subject -> chapter and gets the four-section study page (📘 Chapter Summary / 🎯 High-Yield Concepts / 📝 Important NEET Points / ⚡ Quick Revision Notes) built from retrieved pages - shown only when `NEETRA_ENABLE_LEARN=true` | `learning/learn.py` + `learning/catalog.py` | `ui/learn.py` |
 
 Every generated page, test and revision sheet goes through the **same** retrieval pipeline as the chat:
 `GeniePlatform` calls the tutor's graph, so content always comes from the indexed NCERT pages with
 citations. Nothing is hardcoded - an empty index produces an honest *"no chapters indexed yet"* notice
 instead of invented material. Set `NEET_PLATFORM_ENABLED=false` to serve the original single-chat layout
-and `NEETRA_ENABLE_LEARN=false` to drop the optional Learn tab (its code and tests stay in the repo).
+and `NEETRA_ENABLE_LEARN=true` to opt into the optional Learn tab (its code and tests stay in the repo).
 
 ---
 
@@ -310,10 +311,10 @@ similarity score, and the **Coach** tab documents the persona, the format contra
 The answer mode is remembered per question, not per session: switch it whenever you want a revision
 sheet instead of a lecture, and the same retrieved pages are reused.
 
-With the platform on, the app opens on the **Dashboard**. A student can therefore do the whole study
-loop without leaving the app: **Learn** a chapter -> **Ask Genie** about the part that did not click ->
-**Practice** a test on it -> read the **Progress** scorecards -> **Revision Hub** the topics that lost
-marks. The dashboard's quick actions jump straight into those tabs, and *Revise my weak areas* pulls the
+With the platform on, the app opens on **Ask Genie**. A student can do the main study loop without
+leaving the app: **Ask Genie** about a topic -> **Practice** a test on it -> read the **Progress**
+scorecards -> use the **Revision Hub** for topics that lost marks. The Dashboard's quick actions jump
+straight into those tabs, and *Revise my weak areas* pulls the
 weak list from the progress store. Nothing blocks start-up: the index, the LLM and the chapter catalog
 are all resolved on first use, so the tabs render before a single model file is loaded.
 
@@ -326,7 +327,8 @@ All settings live in `config.py` and can be overridden by environment variables 
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NEET_LLM_BACKEND` | `hf` | `hf` (Transformers) or `mock` (offline stub) |
+| `LLM_PROVIDER` | unset; resolves to `mock` by default | `groq`, `huggingface` or `mock`; takes precedence over the legacy backend |
+| `NEET_LLM_BACKEND` | `mock` | legacy provider setting: `hf` (local Transformers model) or `mock` (offline stub) |
 | `NEET_LLM_MODEL` | `Qwen/Qwen2.5-7B-Instruct` | any HuggingFace chat model |
 | `NEET_LLM_DEVICE` | `auto` | `auto` / `cpu` / `cuda` / `mps` |
 | `NEET_LLM_DTYPE` | `auto` | `float16` / `bfloat16` / `float32` |
@@ -349,13 +351,13 @@ All settings live in `config.py` and can be overridden by environment variables 
 | `NEET_PERSONA_ENABLED` | `true` | prepend the NEET faculty persona (`prompts/persona.txt`) |
 | `NEET_ENFORCE_ANSWER_FORMAT` | `true` | standardise headings, fill skipped sections |
 | `NEET_MCQ_COUNT` | `5` | questions generated in MCQ Practice mode |
-| `NEET_PLATFORM_ENABLED` | `true` | serve the six module tabs (`false` = chat-only layout) |
+| `NEET_PLATFORM_ENABLED` | `true` | serve the five student tabs (`false` = chat-only layout) |
 | `NEET_TEST_QUESTION_COUNT` | `5` | questions per generated Practice test (2-15) |
 | `NEET_MARKS_CORRECT` / `NEET_MARKS_INCORRECT` | `4.0` / `-1.0` | NEET marking used when a test is submitted |
 | `NEET_WEAK_ACCURACY_THRESHOLD` | `0.75` | below this accuracy a topic is reported as weak |
 | `NEET_PROGRESS_DIR` | `progress` | where the JSON study history is written |
-| `NEET_APP_NAME` / `NEET_APP_TAGLINE` | `NEETra AI` / `AI NEET Coach` | UI branding (the coach persona inside the prompts is still "Neet Genie") |
-| `NEETRA_ENABLE_LEARN` | `true` | show the Learn tab; `false` hides it and skips its UI (flag name has no `NEET_` prefix by design) |
+| `NEET_APP_NAME` / `NEET_APP_TAGLINE` | `NEETra AI` / `Every NEET Doubt. One Wish Away.` | UI branding (the coach persona inside the prompts is still "Neet Genie") |
+| `NEETRA_ENABLE_LEARN` | `false` | opt into the Learn tab; the flag name has no `NEET_` prefix by design |
 | `NEET_HF_TOKEN` | - | token for gated HuggingFace repos |
 
 ---
@@ -398,15 +400,11 @@ method the UI uses - `stats()`, `subject_performance()`, `chapter_performance()`
 `daily_series()`, `tests()` - is a store method, not a Gradio concern, so replacing the JSON file with
 SQLite or Postgres later means swapping one class and keeping the same call signatures.
 
-**Extension points - declared, not implemented.** Voice and photo solving are seams, not features:
-`learning/capabilities.py` holds a `CapabilityRegistry` where `chat` is `ACTIVE` and `voice`, `image`,
-`study_plan` and `weakness` are `PLANNED`. The two contracts are `runtime_checkable` Protocols -
-`VoiceTranscriber.transcribe(audio, *, language)` and `ImageSolver.extract_question(image, *, subject)` -
-and `GeniePlatform.listen()` / `solve_photo()` already funnel whatever text they return into
-`GeniePlatform.ask()`, i.e. the same router -> retrieval -> answer graph the chat uses. Calling them today
-raises `CapabilityNotAvailable`, whose `user_message()` explains the roadmap and names the file to change,
-and the Ask Genie tab shows that text in its *"Voice and photo doubt - extension points"* accordion. The
-Architecture tab lists every module, capability and state from the same registry.
+**Input channels.** Typed chat and photo-question text extraction are active; voice input, study plans and
+weakness analysis remain planned. Ask Genie accepts an uploaded photo, extracts text locally with
+`rapidocr-onnxruntime`, and places it in the editable question box. The student reviews or corrects the
+text before sending it through the same router -> retrieval -> answer graph as typed questions. OCR runs
+on the local machine; handwriting, equations and diagrams may need manual correction.
 
 ---
 
@@ -474,10 +472,9 @@ Adding a **new module tab** (or a new input channel) follows the pattern the six
 3. Register the capability in `learning/capabilities.py::DEFAULT_CAPABILITIES` if the module introduces a
    new channel - a `PLANNED` entry is honest UI text today and the activation point tomorrow.
 
-To switch voice or photo solving on, implement the matching Protocol, call
-`platform.capabilities.register("voice", MyTranscriber())`, and wire a `gr.Audio` / `gr.Image` input to
-`GeniePlatform.listen()` / `solve_photo()` in the Ask Genie tab. No other file changes are needed - the
-answer, the citations and the progress counters already handle the result.
+To add voice input, implement `VoiceTranscriber`, register it with
+`platform.capabilities.register("voice", MyTranscriber())`, and wire a `gr.Audio` input to
+`GeniePlatform.listen()` in the Ask Genie tab.
 
 ---
 

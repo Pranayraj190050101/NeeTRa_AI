@@ -1,18 +1,15 @@
 """Extension points for the capabilities the platform is *designed* for.
 
-Voice doubts and photo-based question solving are the next two input channels
-of a NEET learning platform.  They are deliberately **not implemented** here;
-what is implemented is the seam they will slot into, so that adding them later
-does not reshape the services or the UI:
+Voice doubts are a planned input channel. Photo questions use local OCR to
+extract editable text before it enters the existing chat pipeline:
 
 * ``VoiceTranscriber`` / ``ImageSolver`` are ``runtime_checkable`` protocols -
   any object with the right method can be registered.
 * A capability reports ``state`` (``active`` / ``planned`` / ``disabled``) plus
   a ``hook`` name, which is what the UI prints on its "coming soon" card and
   what the future implementation registers against.
-* Until a real backend is registered, the platform's ``listen()`` /
-  ``solve_photo()`` entry points raise :class:`CapabilityNotAvailable`, which
-  the UI turns into a friendly message instead of a traceback.
+* Until a backend is registered, the platform's ``listen()`` entry point raises
+  :class:`CapabilityNotAvailable`.
 
 The existing chat path is unaffected: ``GeniePlatform.ask`` is the single
 funnel every input channel - text, voice or image - will use.
@@ -63,7 +60,7 @@ class VoiceTranscriber(Protocol):
 
 @runtime_checkable
 class ImageSolver(Protocol):
-    """Contract a future OCR + vision-language backend must satisfy."""
+    """Contract an OCR backend that reads question text from an uploaded photo."""
 
     def extract_question(self, image: bytes, *, subject: str | None = None) -> str:
         """Read the question text (and any figure caption) out of a photo."""
@@ -138,13 +135,12 @@ DEFAULT_CAPABILITIES: tuple[Capability, ...] = (
     ),
     Capability(
         key="image",
-        title="Image question solving",
-        description="Photograph a textbook or exam question; OCR plus a vision model extract "
-        "the stem and the coach solves it with citations.",
+        title="Question photo upload",
+        description="Upload a question photo, review the extracted text, then ask Genie.",
         state=CapabilityState.PLANNED,
-        hook="ImageSolver.extract_question -> GeniePlatform.ask",
-        roadmap="register an ImageSolver and add a `gr.Image` input; retrieval and grading "
-        "reuse the existing pipeline unchanged.",
+        hook="ImageSolver.extract_question -> Ask Genie review -> GeniePlatform.ask",
+        roadmap="A local OCR backend reads the uploaded photo; the student can edit the "
+        "question before sending it to Genie.",
     ),
     Capability(
         key="study_plan",
